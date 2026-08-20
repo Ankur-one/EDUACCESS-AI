@@ -1,23 +1,17 @@
 from app.database.database import Base, engine
-from app.database.models import (
-    AccessibilityProfile,
-    QuizResult,
-    StudyProgress,
-    UploadedDocument,
-    User,
-)
 
-__all__ = [
-    "AccessibilityProfile",
-    "QuizResult",
-    "StudyProgress",
-    "UploadedDocument",
-    "User",
-    "init_database",
-]
+# Import all models so SQLAlchemy knows about the tables
+from app.database.models import (
+    StudyProgress,  # noqa: F401 — imported to register the model with SQLAlchemy
+    UploadedDocument,  # noqa: F401 — imported to register the model with SQLAlchemy
+)
 
 
 def init_database():
+    """
+    Create all database tables.
+    """
+
     Base.metadata.create_all(bind=engine)
 
     print("========================================")
