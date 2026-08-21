@@ -1,36 +1,8 @@
 from app.database.database import Base, engine
-from app.database.models import (
-    AccessibilityProfile,
-    QuizResult,
-    StudyProgress,
-    UploadedDocument,
-    User,
-)
+from app.database.models import User
 
 __all__ = [
-    "AccessibilityProfile",
-    "QuizResult",
-    "StudyProgress",
-    "UploadedDocument",
+    "Base",
+    "engine",
     "User",
-    "init_database",
 ]
-
-
-def init_database():
-    Base.metadata.create_all(bind=engine)
-
-    print("========================================")
-    print("   EduAccess AI Database Initialized")
-    print("========================================")
-    print("Tables created:")
-    print("✓ users")
-    print("✓ accessibility_profiles")
-    print("✓ study_progress")
-    print("✓ quiz_results")
-    print("✓ uploaded_documents")
-    print("========================================")
-
-
-if __name__ == "__main__":
-    init_database()

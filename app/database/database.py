@@ -1,33 +1,42 @@
-# pyright: ignore[reportMissingImports]
-from sqlalchemy import create_engine  # pyright: ignore[reportMissingImports]
-from sqlalchemy.orm import declarative_base, sessionmaker  # pyright: ignore[reportMissingImports]
+from sqlalchemy import create_engine  # type: ignore[reportMissingImports]
+from sqlalchemy.orm import declarative_base  # type: ignore[reportMissingImports]
+from sqlalchemy.orm import sessionmaker  # type: ignore[reportMissingImports]
 
-from ..config.settings import settings
+from app.config.settings import settings
 
+
+# ============================================================
+# DATABASE URL
+# ============================================================
+
+DATABASE_URL = settings.DATABASE_URL
+
+
+# ============================================================
+# ENGINE
+# ============================================================
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    DATABASE_URL,
     connect_args={
         "check_same_thread": False
-    }
+    },
 )
 
+
+# ============================================================
+# SESSION
+# ============================================================
 
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
 
+# ============================================================
+# BASE
+# ============================================================
+
 Base = declarative_base()
-
-
-def get_db():
-    db = SessionLocal()
-
-    try:
-        yield db
-
-    finally:
-        db.close()

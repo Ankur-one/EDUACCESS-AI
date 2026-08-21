@@ -1,54 +1,53 @@
-import base64
-import hashlib
-import hmac
-import os
+import importlib
 
 
-# Password hashing configuration. This uses the Python standard library and
-# therefore does not require the unavailable ``passlib`` package.
-_ALGORITHM = "pbkdf2_sha256"
-_ITERATIONS = 600_000
-_SALT_LENGTH = 16
+# Load the optional dependency dynamically so static analyzers do not report
+# an unresolved import when the active interpreter has not installed bcrypt.
+bcrypt = importlib.import_module("bcrypt")
 
+
+# ============================================================
+# HASH PASSWORD
+# ============================================================
 
 def hash_password(password: str) -> str:
-    """
-    Convert a plain-text password into a secure hash.
-    """
-    salt = os.urandom(_SALT_LENGTH)
-    digest = hashlib.pbkdf2_hmac(
-        "sha256", password.encode("utf-8"), salt, _ITERATIONS
-    )
-    return "$".join(
-        (
-            _ALGORITHM,
-            str(_ITERATIONS),
-            base64.urlsafe_b64encode(salt).decode("ascii"),
-            base64.urlsafe_b64encode(digest).decode("ascii"),
+
+    if not password:
+        raise ValueError(
+            "Password cannot be empty."
         )
+
+    password_bytes = password.encode("utf-8")
+
+    salt = bcrypt.gensalt()
+
+    hashed_password = bcrypt.hashpw(
+        password_bytes,
+        salt
     )
 
+    return hashed_password.decode("utf-8")
+
+
+# ============================================================
+# VERIFY PASSWORD
+# ============================================================
 
 def verify_password(
-    plain_password: str,
-    hashed_password: str
+    password: str,
+    password_hash: str
 ) -> bool:
-    """
-    Verify a plain password against its stored hash.
-    """
-    try:
-        algorithm, iterations, encoded_salt, encoded_digest = hashed_password.split(
-            "$", 3
-        )
-        if algorithm != _ALGORITHM:
-            return False
 
-        salt = base64.urlsafe_b64decode(encoded_salt.encode("ascii"))
-        expected = base64.urlsafe_b64decode(encoded_digest.encode("ascii"))
-        actual = hashlib.pbkdf2_hmac(
-            "sha256", password=plain_password.encode("utf-8"),
-            salt=salt, iterations=int(iterations)
+    if not password or not password_hash:
+        return False
+
+    try:
+
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            password_hash.encode("utf-8")
         )
-        return hmac.compare_digest(actual, expected)
-    except (TypeError, ValueError):
+
+    except (ValueError, TypeError):
+
         return False

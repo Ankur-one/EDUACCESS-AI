@@ -1,84 +1,213 @@
 from typing import Any
 
-from app.auth.password import hash_password
-from app.database.crud import (
-    create_accessibility_profile,
-    create_user,
-    get_user_by_email,
-)
+from app.auth.password import hash_password, verify_password
+from app.database.database import SessionLocal
+from app.database.models import User
 
+
+# ============================================================
+# REGISTER USER
+# ============================================================
 
 def register_user(
-    db: Any,
     full_name: str,
     email: str,
-    password: str
+    password: str,
+    disability_type: str = "No disability",
+    disability_details: str = "",
+    preferred_language: str = "English",
+    simple_explanation: bool = False,
+    step_by_step: bool = False,
+    repetition_support: bool = False,
+    visual_explanation: bool = False,
+    text_to_speech: bool = False,
+    speech_to_text: bool = False,
+    large_text: bool = False,
 ):
     """
-    Register a new EduAccess AI student.
+    Create a new EduAccess AI student account.
     """
 
-    # Clean input
-    full_name = full_name.strip()
-    email = email.strip().lower()
+    db: Any = SessionLocal()
 
-    # Check if email already exists
-    existing_user = get_user_by_email(
-        db,
-        email
-    )
+    try:
 
-    if existing_user:
-        return None, "Email is already registered."
+        # ----------------------------------------------------
+        # Check existing email
+        # ----------------------------------------------------
 
-    # Hash password
-    password_hash = hash_password(password)
+        existing_user = (
+            db.query(User)
+            .filter(User.email == email.strip().lower())
+            .first()
+        )
 
-    # Create user
-    user = create_user(
-        db=db,
-        full_name=full_name,
-        email=email,
-        password_hash=password_hash
-    )
+        if existing_user:
 
-    # Automatically create accessibility profile
-    create_accessibility_profile(
-        db=db,
-        user_id=user.id
-    )
+            raise ValueError(
+                "An account with this email already exists."
+            )
 
-    return user, "Registration successful."
+        # ----------------------------------------------------
+        # Hash password
+        # ----------------------------------------------------
+
+        password_hash = hash_password(password)
+
+        # ----------------------------------------------------
+        # Create user
+        # ----------------------------------------------------
+
+        user = User(
+            full_name=full_name.strip(),
+
+            email=email.strip().lower(),
+
+            password_hash=password_hash,
+
+            disability_type=disability_type,
+
+            disability_details=disability_details,
+
+            preferred_language=preferred_language,
+
+            simple_explanation=simple_explanation,
+
+            step_by_step=step_by_step,
+
+            repetition_support=repetition_support,
+
+            visual_explanation=visual_explanation,
+
+            text_to_speech=text_to_speech,
+
+            speech_to_text=speech_to_text,
+
+            large_text=large_text,
+        )
+
+        # ----------------------------------------------------
+        # Save
+        # ----------------------------------------------------
+
+        db.add(user)
+
+        db.commit()
+
+        db.refresh(user)
+
+        return user
+
+    except Exception:
+
+        db.rollback()
+
+        raise
+
+    finally:
+
+        db.close()
 
 
-def authenticate_user(
-    db: Any,
+# ============================================================
+# LOGIN USER
+# ============================================================
+
+def login_user(
     email: str,
-    password: str
+    password: str,
 ):
     """
-    Authenticate an existing student.
+    Authenticate a student.
     """
 
-    from app.auth.password import verify_password
+    db: Any = SessionLocal()
 
-    email = email.strip().lower()
+    try:
 
-    user = get_user_by_email(
-        db,
-        email
-    )
+        user = (
+            db.query(User)
+            .filter(
+                User.email == email.strip().lower()
+            )
+            .first()
+        )
 
-    if not user:
-        return None
+        # ----------------------------------------------------
+        # User doesn't exist
+        # ----------------------------------------------------
 
-    if not verify_password(
-        password,
-        user.password_hash
-    ):
-        return None
+        if not user:
 
-    if not user.is_active:
-        return None
+            return None
 
-    return user
+        # ----------------------------------------------------
+        # Verify password
+        # ----------------------------------------------------
+
+        if not verify_password(
+            password,
+            user.password_hash
+        ):
+
+            return None
+
+        return user
+
+    finally:
+
+        db.close()
+
+
+# ============================================================
+# GET USER BY ID
+# ============================================================
+
+def get_user_by_id(
+    user_id: int
+):
+    """
+    Get a student by database ID.
+    """
+
+    db: Any = SessionLocal()
+
+    try:
+
+        return (
+            db.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
+
+    finally:
+
+        db.close()
+
+
+# ============================================================
+# GET USER BY EMAIL
+# ============================================================
+
+def get_user_by_email(
+    email: str
+):
+    """
+    Get a student by email.
+    """
+
+    db: Any = SessionLocal()
+
+    try:
+
+        return (
+            db.query(User)
+            .filter(
+                User.email == email.strip().lower()
+            )
+            .first()
+        )
+
+    finally:
+
+        db.close()

@@ -1,95 +1,240 @@
-import streamlit as st  # type: ignore[import-not-found]
+import importlib
 
 from app.auth.authentication import register_user
-from app.database.database import SessionLocal
+
+st = importlib.import_module("streamlit")
 
 
 def show_register():
 
-    st.title("📝 Create Your EduAccess AI Account")
+    st.title("📝 Create EduAccess AI Account")
 
     st.write(
-        "Create an account to personalize your learning experience."
+        "Create your account and personalize your learning experience."
     )
 
-    with st.form("registration_form"):
+    st.divider()
 
-        full_name = st.text_input(
-            "Full Name",
-            placeholder="Enter your full name"
+    # ========================================================
+    # BASIC INFORMATION
+    # ========================================================
+
+    st.subheader("👤 Basic Information")
+
+    full_name = st.text_input(
+        "Full Name",
+        placeholder="Enter your full name"
+    )
+
+    email = st.text_input(
+        "Email",
+        placeholder="student@example.com"
+    )
+
+    password = st.text_input(
+        "Password",
+        type="password"
+    )
+
+    confirm_password = st.text_input(
+        "Confirm Password",
+        type="password"
+    )
+
+    st.divider()
+
+    # ========================================================
+    # DISABILITY PROFILE
+    # ========================================================
+
+    st.subheader("♿ Accessibility Profile")
+
+    disability_options = [
+        "No disability",
+        "Visual impairment",
+        "Hearing impairment",
+        "Speech impairment",
+        "Physical / Motor disability",
+        "Learning disability",
+        "Dyslexia",
+        "Intellectual disability",
+        "Autism / Neurodevelopmental support",
+        "Multiple disabilities",
+        "Other"
+    ]
+
+    disability_type = st.selectbox(
+        "Select your disability / accessibility need",
+        disability_options
+    )
+
+    disability_details = st.text_area(
+        "Additional accessibility information",
+        placeholder=(
+            "Tell us anything that can help EduAccess AI "
+            "support your learning."
+        )
+    )
+
+    st.divider()
+
+    # ========================================================
+    # LEARNING PREFERENCES
+    # ========================================================
+
+    st.subheader("🎓 Learning Preferences")
+
+    preferred_language = st.selectbox(
+        "🌐 Preferred Language",
+        [
+            "English",
+            "Hindi",
+            "Punjabi"
+        ]
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        simple_explanation = st.checkbox(
+            "🧩 Simple explanations"
         )
 
-        email = st.text_input(
-            "Email",
-            placeholder="student@example.com"
+        step_by_step = st.checkbox(
+            "🪜 Step-by-step learning"
         )
 
-        password = st.text_input(
-            "Password",
-            type="password",
-            placeholder="Create a strong password"
+        repetition_support = st.checkbox(
+            "🔁 Repeat important concepts"
         )
 
-        confirm_password = st.text_input(
-            "Confirm Password",
-            type="password",
-            placeholder="Re-enter your password"
+        visual_explanation = st.checkbox(
+            "📊 Visual / structured explanations"
         )
 
-        submitted = st.form_submit_button(
-            "Create Account",
-            use_container_width=True
+    with col2:
+
+        text_to_speech = st.checkbox(
+            "🔊 Text-to-speech support"
         )
 
-    if submitted:
+        speech_to_text = st.checkbox(
+            "🎤 Speech-to-text support"
+        )
 
-        if not full_name:
-            st.error("Please enter your full name.")
+        large_text = st.checkbox(
+            "🔎 Large text / readability support"
+        )
+
+    st.divider()
+
+    # ========================================================
+    # CREATE ACCOUNT
+    # ========================================================
+
+    if st.button(
+        "📝 Create Account",
+        use_container_width=True
+    ):
+
+        # ----------------------------------------------------
+        # Validation
+        # ----------------------------------------------------
+
+        if not full_name.strip():
+
+            st.warning(
+                "Please enter your full name."
+            )
+
             return
 
-        if not email:
-            st.error("Please enter your email.")
+        if not email.strip():
+
+            st.warning(
+                "Please enter your email."
+            )
+
             return
 
         if not password:
-            st.error("Please enter a password.")
+
+            st.warning(
+                "Please enter a password."
+            )
+
             return
 
         if len(password) < 8:
-            st.error(
+
+            st.warning(
                 "Password must contain at least 8 characters."
             )
+
             return
 
         if password != confirm_password:
+
             st.error(
                 "Passwords do not match."
             )
+
             return
 
-        db = SessionLocal()
+        # ----------------------------------------------------
+        # Create account
+        # ----------------------------------------------------
 
         try:
 
-            user, message = register_user(
-                db=db,
+            register_user(
+
                 full_name=full_name,
+
                 email=email,
-                password=password
+
+                password=password,
+
+                disability_type=disability_type,
+
+                disability_details=disability_details,
+
+                preferred_language=preferred_language,
+
+                simple_explanation=simple_explanation,
+
+                step_by_step=step_by_step,
+
+                repetition_support=repetition_support,
+
+                visual_explanation=visual_explanation,
+
+                text_to_speech=text_to_speech,
+
+                speech_to_text=speech_to_text,
+
+                large_text=large_text,
             )
 
-            if user:
-                st.success(
-                    "🎉 Account created successfully!"
-                )
+            st.success(
+                "🎉 Account created successfully!"
+            )
 
-                st.info(
-                    "Your accessibility profile has been created. "
-                    "You will configure it after login."
-                )
+            st.info(
+                "You can now go to the Login tab and sign in."
+            )
 
-            else:
-                st.error(message)
+        except ValueError as e:
 
-        finally:
-            db.close()
+            st.error(
+                str(e)
+            )
+
+        except Exception as e:
+
+            st.error(
+                "Registration failed."
+            )
+
+            st.exception(e)
