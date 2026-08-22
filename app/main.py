@@ -1,4 +1,4 @@
-import streamlit as st  # pyright: ignore[reportMissingImports]
+import streamlit as st  # type: ignore[import-not-found]
 
 # ============================================================
 # AUTHENTICATION & SESSION
@@ -16,6 +16,7 @@ from app.auth.session import (
 
 from app.ui.login import show_login
 from app.ui.register import show_register
+from app.ui.dashboard import show_dashboard
 from app.ui.tutor import show_tutor
 from app.ui.accessibility import show_accessibility
 
@@ -94,7 +95,6 @@ if not is_logged_in():
     # --------------------------------------------------------
 
     with login_tab:
-
         show_login()
 
     # --------------------------------------------------------
@@ -102,85 +102,73 @@ if not is_logged_in():
     # --------------------------------------------------------
 
     with register_tab:
-
         show_register()
 
 
 # ============================================================
-# LOGGED IN
+# LOGGED-IN USER
 # ============================================================
 
 else:
 
-    # ========================================================
+    # --------------------------------------------------------
+    # GET USER
+    # --------------------------------------------------------
+
+    user = st.session_state.get("user")
+
+    # --------------------------------------------------------
     # SIDEBAR
-    # ========================================================
-
-    st.sidebar.title("♿ EduAccess AI")
-
-    st.sidebar.success(
-        f"Welcome, {st.session_state.user_name}"
-    )
-
-    st.sidebar.divider()
-
-    # --------------------------------------------------------
-    # USER INFORMATION
     # --------------------------------------------------------
 
-    st.sidebar.markdown(
-        "### 👤 Student"
-    )
+    with st.sidebar:
 
-    st.sidebar.write(
-        st.session_state.user_name
-    )
+        st.title("♿ EduAccess AI")
 
-    st.sidebar.markdown(
-        "### 📧 Email"
-    )
+        if user:
 
-    st.sidebar.write(
-        st.session_state.user_email
-    )
+            user_name = getattr(
+                user,
+                "full_name",
+                "Student",
+            )
 
-    st.sidebar.markdown(
-        "### ♿ Accessibility"
-    )
+            st.write(
+                f"👤 **{user_name}**"
+            )
 
-    st.sidebar.write(
-        st.session_state.disability_type
-    )
+        st.divider()
 
-    st.sidebar.divider()
+        # ----------------------------------------------------
+        # NAVIGATION
+        # ----------------------------------------------------
 
-    # ========================================================
-    # NAVIGATION
-    # ========================================================
+        st.subheader("📚 Navigation")
 
-    page = st.sidebar.radio(
-        "📚 Navigation",
-        [
-            "🏠 Dashboard",
-            "🤖 AI Tutor",
-            "♿ Accessibility",
-        ],
-    )
+        page = st.radio(
+            "Select Page",
+            [
+                "🏠 Dashboard",
+                "🤖 AI Tutor",
+                "♿ Accessibility",
+            ],
+            label_visibility="collapsed",
+        )
 
-    st.sidebar.divider()
+        st.divider()
 
-    # ========================================================
-    # LOGOUT
-    # ========================================================
+        # ----------------------------------------------------
+        # LOGOUT
+        # ----------------------------------------------------
 
-    if st.sidebar.button(
-        "🚪 Logout",
-        use_container_width=True,
-    ):
+        if st.button(
+            "🚪 Logout",
+            use_container_width=True,
+        ):
 
-        logout_user()
+            logout_user()
 
-        st.rerun()
+            st.rerun()
 
     # ========================================================
     # DASHBOARD
@@ -188,158 +176,7 @@ else:
 
     if page == "🏠 Dashboard":
 
-        st.title(
-            "🎓 EduAccess AI Dashboard"
-        )
-
-        st.subheader(
-            f"Welcome, {st.session_state.user_name}! 👋"
-        )
-
-        st.write(
-            "Your personalized accessible learning environment."
-        )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # PROFILE CARDS
-        # ----------------------------------------------------
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-
-            st.info(
-                f"""
-### 👤 Student
-
-**{st.session_state.user_name}**
-"""
-            )
-
-        with col2:
-
-            st.info(
-                f"""
-### ♿ Accessibility
-
-**{st.session_state.disability_type}**
-"""
-            )
-
-        with col3:
-
-            st.success(
-                """
-### 🤖 AI Tutor
-
-**Available**
-"""
-            )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # FEATURES
-        # ----------------------------------------------------
-
-        st.subheader(
-            "🚀 EduAccess AI Features"
-        )
-
-        feature1, feature2, feature3 = st.columns(3)
-
-        with feature1:
-
-            st.markdown(
-                """
-### 🤖 AI Tutor
-
-Ask questions and receive
-personalized explanations.
-"""
-            )
-
-        with feature2:
-
-            st.markdown(
-                """
-### ♿ Accessibility
-
-Customize learning according
-to your accessibility needs.
-"""
-            )
-
-        with feature3:
-
-            st.markdown(
-                """
-### 📚 Smart Learning
-
-Learn using simple,
-structured and adaptive content.
-"""
-            )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # ACCESSIBILITY SUMMARY
-        # ----------------------------------------------------
-
-        st.subheader(
-            "♿ Your Learning Support"
-        )
-
-        support1, support2, support3 = st.columns(3)
-
-        with support1:
-
-            st.markdown(
-                """
-🔊 **Audio Support**
-
-Text-to-Speech can help
-students who prefer listening.
-"""
-            )
-
-        with support2:
-
-            st.markdown(
-                """
-🪜 **Step-by-Step Learning**
-
-Complex concepts can be
-broken into smaller steps.
-"""
-            )
-
-        with support3:
-
-            st.markdown(
-                """
-🔎 **Readable Content**
-
-Large text and accessible
-formatting improve readability.
-"""
-            )
-
-        st.divider()
-
-        st.info(
-            """
-💡 Use the sidebar to access:
-
-**🤖 AI Tutor** → Ask educational questions.
-
-**♿ Accessibility** → Customize your learning
-experience.
-"""
-        )
+        show_dashboard()
 
     # ========================================================
     # AI TUTOR

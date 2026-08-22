@@ -1,4 +1,17 @@
-import streamlit as st  # type: ignore[reportMissingImports]
+"""Session-state helpers with an optional Streamlit dependency."""
+
+try:
+    import importlib
+
+    st = importlib.import_module("streamlit")
+except ModuleNotFoundError:
+    class _SessionState(dict):
+        """Minimal fallback used when this module is imported outside Streamlit."""
+
+    class _StreamlitFallback:
+        session_state = _SessionState()
+
+    st = _StreamlitFallback()
 
 
 # ============================================================
@@ -6,57 +19,84 @@ import streamlit as st  # type: ignore[reportMissingImports]
 # ============================================================
 
 def initialize_session():
+    """
+    Initialize all Streamlit session variables.
+    """
 
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
+    defaults = {
+        "logged_in": False,
+        "user": None,
+        "user_id": None,
+        "user_name": None,
+        "disability_type": None,
+        "chat_history": [],
+        "conversation_history": [],
+    }
 
-    if "user_id" not in st.session_state:
-        st.session_state.user_id = None
+    for key, value in defaults.items():
 
-    if "user_name" not in st.session_state:
-        st.session_state.user_name = None
-
-    if "user_email" not in st.session_state:
-        st.session_state.user_email = None
-
-    if "disability_type" not in st.session_state:
-        st.session_state.disability_type = None
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 # ============================================================
-# LOGIN SESSION
+# CREATE LOGIN SESSION
 # ============================================================
 
 def create_login_session(user):
+    """
+    Create a complete login session for the authenticated user.
 
-    st.session_state.logged_in = True
+    This function is kept for compatibility with the existing
+    app/ui/login.py.
+    """
 
-    st.session_state.user_id = user.id
+    if user is None:
+        return False
 
-    st.session_state.user_name = user.full_name
+    # Store complete User object
+    st.session_state["user"] = user
 
-    st.session_state.user_email = user.email
+    # Login status
+    st.session_state["logged_in"] = True
 
-    st.session_state.disability_type = (
-        user.disability_type
+    # User ID
+    st.session_state["user_id"] = getattr(
+        user,
+        "id",
+        None,
     )
 
+    # User name
+    st.session_state["user_name"] = getattr(
+        user,
+        "full_name",
+        "Student",
+    )
+
+    # Disability
+    st.session_state["disability_type"] = getattr(
+        user,
+        "disability_type",
+        None,
+    )
+
+    return True
+
 
 # ============================================================
-# LOGOUT
+# LOGIN USER
 # ============================================================
 
-def logout_user():
+def login_user(user):
+    """
+    New preferred login function.
 
-    st.session_state.logged_in = False
+    Internally uses create_login_session() so both old and
+    new code work correctly.
+    """
 
-    st.session_state.user_id = None
-
-    st.session_state.user_name = None
-
-    st.session_state.user_email = None
-
-    st.session_state.disability_type = None
+    return create_login_session(user)
 
 
 # ============================================================
@@ -64,30 +104,50 @@ def logout_user():
 # ============================================================
 
 def is_logged_in():
+    """
+    Return True only when a valid User object exists.
+    """
 
-    return st.session_state.get(
-        "logged_in",
-        False
+    user = st.session_state.get("user")
+
+    return (
+        st.session_state.get("logged_in", False)
+        and user is not None
     )
 
 
 # ============================================================
-# CURRENT USER ID
+# GET CURRENT USER
 # ============================================================
 
-def get_current_user_id():
+def get_current_user():
+    """
+    Return the currently logged-in User object.
+    """
 
-    return st.session_state.get(
-        "user_id"
-    )
+    return st.session_state.get("user")
 
 
 # ============================================================
-# CURRENT USER NAME
+# LOGOUT
 # ============================================================
 
-def get_current_user_name():
+def logout_user():
+    """
+    Completely clear the current login session.
+    """
 
-    return st.session_state.get(
-        "user_name"
-    )
+    st.session_state["logged_in"] = False
+
+    st.session_state["user"] = None
+
+    st.session_state["user_id"] = None
+
+    st.session_state["user_name"] = None
+
+    st.session_state["disability_type"] = None
+
+    # Clear AI Tutor history
+    st.session_state["chat_history"] = []
+
+    st.session_state["conversation_history"] = []
