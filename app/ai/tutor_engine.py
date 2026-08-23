@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Optional
 
 from google import genai
 
@@ -6,13 +6,7 @@ from app.config.settings import settings
 
 
 # ============================================================
-# EDUACCESS AI TUTOR ENGINE
-# Stable version
-# ============================================================
-
-
-# ============================================================
-# GEMINI MODEL
+# GEMINI CONFIGURATION
 # ============================================================
 
 GEMINI_MODEL = "gemini-3.6-flash"
@@ -23,89 +17,18 @@ GEMINI_MODEL = "gemini-3.6-flash"
 # ============================================================
 
 def get_gemini_client():
-    """
-    Create Gemini client safely.
-    """
-
-    api_key = getattr(
-        settings,
-        "GEMINI_API_KEY",
-        None,
-    )
-
-    if not api_key:
-
+    if not settings.GEMINI_API_KEY:
         raise ValueError(
             "GEMINI_API_KEY is not configured."
         )
 
     return genai.Client(
-        api_key=api_key
+        api_key=settings.GEMINI_API_KEY
     )
 
 
 # ============================================================
-# SAFE TEXT CONVERSION
-# ============================================================
-
-def safe_text(value: Any) -> str:
-    """
-    Convert input safely to text.
-
-    IMPORTANT:
-    Never call .strip() directly on unknown objects.
-    """
-
-    if value is None:
-        return ""
-
-    if isinstance(value, str):
-        return value.strip()
-
-    # Do NOT convert SQLAlchemy User objects into question text.
-    if hasattr(value, "__table__"):
-
-        return ""
-
-    try:
-        return str(value).strip()
-
-    except Exception:
-        return ""
-
-
-# ============================================================
-# DETECT USER OBJECT
-# ============================================================
-
-def looks_like_user(value: Any) -> bool:
-    """
-    Detect the logged-in SQLAlchemy User object.
-    """
-
-    if value is None:
-        return False
-
-    # SQLAlchemy model objects generally have these fields.
-    user_fields = (
-        "full_name",
-        "email",
-        "preferred_language",
-        "disability_type",
-    )
-
-    matches = 0
-
-    for field in user_fields:
-
-        if hasattr(value, field):
-            matches += 1
-
-    return matches >= 2
-
-
-# ============================================================
-# PERSONALIZED LEARNING INSTRUCTIONS
+# LEARNING INSTRUCTIONS
 # ============================================================
 
 def build_learning_instruction(
@@ -119,62 +42,50 @@ def build_learning_instruction(
     dyslexia_friendly: bool = False,
 ) -> str:
 
-    instructions = []
-
-    instructions.append(
+    instructions = [
         f"Respond in {preferred_language}."
-    )
+    ]
 
     if simplified_language:
-
         instructions.append(
             "Use very simple and easy-to-understand language."
         )
 
     if step_by_step_learning:
-
         instructions.append(
-            "Explain the topic step by step."
+            "Explain difficult concepts step by step."
         )
 
     if repetition_support:
-
         instructions.append(
-            "Repeat important concepts clearly when useful."
+            "Repeat important concepts and provide a short summary."
         )
 
     if visual_explanations:
-
         instructions.append(
-            "Use tables, bullet points, ASCII diagrams, "
-            "examples, and structured text when useful."
+            "Use bullet points, tables, examples, "
+            "ASCII diagrams, or structured text when useful."
         )
 
     if large_text:
-
         instructions.append(
             "Use clear headings, short paragraphs, "
             "and generous spacing."
         )
 
     if high_contrast:
-
         instructions.append(
-            "Keep the answer clean, structured, "
-            "and free from unnecessary visual clutter."
+            "Keep the response clean and highly structured."
         )
 
     if dyslexia_friendly:
-
         instructions.append(
             "Use short sentences, simple words, "
-            "clear headings, bullet points, "
-            "and generous spacing."
+            "clear headings, bullet points, and spacing."
         )
 
     instructions.append(
-        "Be patient, supportive, respectful, "
-        "and encouraging."
+        "Be patient, supportive, respectful, and encouraging."
     )
 
     return "\n".join(
@@ -216,37 +127,29 @@ def create_tutor_prompt(
     accessibility_info = []
 
     if disability_type:
-
         accessibility_info.append(
-            f"Student accessibility need: {disability_type}."
+            f"Accessibility need: {disability_type}"
         )
 
     if disability_details:
-
         accessibility_info.append(
-            f"Additional accessibility information: "
-            f"{disability_details}."
+            f"Additional information: {disability_details}"
         )
 
     accessibility_text = "\n".join(
-        accessibility_info
+        f"- {item}"
+        for item in accessibility_info
     )
 
-    if not accessibility_text:
-
-        accessibility_text = (
-            "No additional disability information provided."
-        )
-
     prompt = f"""
-You are EduAccess AI, an inclusive educational AI tutor.
+You are EduAccess AI, an inclusive educational tutor.
 
-Your purpose is to help students understand educational
-topics clearly, patiently, and accessibly.
+Your purpose is to help students learn independently
+using clear, accessible, personalized explanations.
 
 ACCESSIBILITY INFORMATION:
 
-{accessibility_text}
+{accessibility_text or "- No additional information provided."}
 
 LEARNING INSTRUCTIONS:
 
@@ -259,44 +162,26 @@ STUDENT QUESTION:
 GENERAL TEACHING RULES:
 
 1. Give accurate educational information.
-
 2. Use simple language whenever possible.
-
 3. Explain difficult concepts step by step.
-
 4. Give examples when useful.
-
 5. Do not assume advanced prior knowledge.
-
 6. Use headings and bullet points.
-
 7. Be patient and supportive.
-
 8. For technical questions, explain the concept first.
-
-9. For programming questions, explain the code clearly.
-
+9. For programming questions, explain the code.
 10. For mathematics, show calculation steps.
-
-11. If the student makes a mistake, correct it politely.
-
+11. Correct mistakes politely.
 12. Focus on understanding, not only the final answer.
-
-13. Adapt the response to accessibility preferences.
-
-14. Never make assumptions about a disability.
-
-15. Keep the answer educational and student-friendly.
-
-16. If conversation context is provided, use it to
-    understand follow-up questions.
+13. Never make assumptions beyond the accessibility
+    information provided.
+14. Adapt the answer to the student's preferences.
 
 """
 
     if context:
-
         prompt += f"""
-CONVERSATION HISTORY:
+PREVIOUS CONVERSATION:
 
 {context}
 
@@ -310,7 +195,7 @@ Now answer the student's question.
 
 
 # ============================================================
-# ASK GEMINI
+# ASK AI
 # ============================================================
 
 def ask_ai(
@@ -329,34 +214,35 @@ def ask_ai(
 ) -> str:
 
     # --------------------------------------------------------
-    # SAFE QUESTION VALIDATION
+    # Validate question
     # --------------------------------------------------------
 
-    question = safe_text(question)
+    if question is None:
+        return "Please enter a question."
+
+    if not isinstance(question, str):
+        question = str(question)
+
+    question = question.strip()
 
     if not question:
-
-        return (
-            "❌ Please enter a text question."
-        )
+        return "Please enter a question."
 
     # --------------------------------------------------------
-    # CREATE CLIENT
+    # Gemini client
     # --------------------------------------------------------
 
     try:
-
         client = get_gemini_client()
 
     except Exception as e:
-
         return (
             "❌ Gemini configuration error:\n\n"
             f"{str(e)}"
         )
 
     # --------------------------------------------------------
-    # CREATE PROMPT
+    # Prompt
     # --------------------------------------------------------
 
     prompt = create_tutor_prompt(
@@ -375,7 +261,7 @@ def ask_ai(
     )
 
     # --------------------------------------------------------
-    # CALL GEMINI
+    # Gemini request
     # --------------------------------------------------------
 
     try:
@@ -385,34 +271,43 @@ def ask_ai(
             contents=prompt,
         )
 
-        if response is None:
+        if response and response.text:
 
-            return (
-                "⚠️ Gemini returned no response."
-            )
-
-        answer = getattr(
-            response,
-            "text",
-            None,
-        )
-
-        answer = safe_text(answer)
-
-        if answer:
-
-            return answer
+            return response.text.strip()
 
         return (
-            "⚠️ Sorry, I could not generate an answer. "
+            "⚠️ Gemini did not return an answer. "
             "Please try again."
         )
 
     except Exception as e:
 
+        error_text = str(e)
+
+        if "503" in error_text or "UNAVAILABLE" in error_text:
+
+            return (
+                "⚠️ Gemini is temporarily busy.\n\n"
+                "Please wait a few seconds and try again."
+            )
+
+        if "429" in error_text:
+
+            return (
+                "⚠️ Gemini request limit reached.\n\n"
+                "Please wait a little and try again."
+            )
+
+        if "404" in error_text:
+
+            return (
+                "❌ Gemini model is unavailable for this API key.\n\n"
+                f"Configured model: {GEMINI_MODEL}"
+            )
+
         return (
             "❌ AI Tutor error:\n\n"
-            f"{str(e)}"
+            f"{error_text}"
         )
 
 
@@ -421,77 +316,55 @@ def ask_ai(
 # ============================================================
 
 def ask_tutor(
-    user=None,
-    question=None,
-    context=None,
+    user,
+    question: str,
+    context: Optional[str] = None,
 ) -> str:
     """
-    MAIN PUBLIC FUNCTION USED BY tutor.py.
+    Main function used by the Tutor UI.
 
-    Correct usage:
-
-        ask_tutor(
-            user=user,
-            question=question
-        )
-
-    This function also protects against accidentally reversed
-    arguments:
-
-        ask_tutor(question, user)
-
+    IMPORTANT:
+        ask_tutor(user, question, context)
     """
 
-    # ========================================================
-    # FIX REVERSED ARGUMENTS
-    # ========================================================
-
-    if (
-        isinstance(user, str)
-        and looks_like_user(question)
-    ):
-
-        real_question = user
-        real_user = question
-
-        user = real_user
-        question = real_question
-
-    # ========================================================
-    # QUESTION VALIDATION
-    # ========================================================
-
-    question = safe_text(question)
-
-    if not question:
-
-        return (
-            "❌ Please enter a text question."
-        )
-
-    # ========================================================
-    # USER VALIDATION
-    # ========================================================
+    # --------------------------------------------------------
+    # Validate user
+    # --------------------------------------------------------
 
     if user is None:
 
         return (
-            "❌ User session not found. "
+            "⚠️ User session not found.\n\n"
             "Please login again."
         )
 
-    # ========================================================
-    # GET USER SETTINGS
-    # ========================================================
+    # --------------------------------------------------------
+    # Safely convert question to text
+    # --------------------------------------------------------
 
-    preferred_language = (
-        getattr(
-            user,
-            "preferred_language",
-            None,
-        )
-        or "English"
-    )
+    if question is None:
+
+        return "Please enter a question."
+
+    if not isinstance(question, str):
+
+        question = str(question)
+
+    question = question.strip()
+
+    if not question:
+
+        return "Please enter a question."
+
+    # --------------------------------------------------------
+    # Get user preferences safely
+    # --------------------------------------------------------
+
+    preferred_language = getattr(
+        user,
+        "preferred_language",
+        None,
+    ) or "English"
 
     simplified_language = bool(
         getattr(
@@ -561,9 +434,9 @@ def ask_tutor(
         None,
     )
 
-    # ========================================================
-    # SEND TO AI
-    # ========================================================
+    # --------------------------------------------------------
+    # Ask AI
+    # --------------------------------------------------------
 
     return ask_ai(
         question=question,
@@ -579,41 +452,3 @@ def ask_tutor(
         disability_type=disability_type,
         disability_details=disability_details,
     )
-
-
-# ============================================================
-# TEST FUNCTION
-# ============================================================
-
-def test_tutor_engine():
-
-    print("==========================================")
-    print("EduAccess AI Tutor Engine")
-    print("==========================================")
-
-    print(f"Model: {GEMINI_MODEL}")
-
-    api_key = getattr(
-        settings,
-        "GEMINI_API_KEY",
-        None,
-    )
-
-    if api_key:
-
-        print("Gemini API Key: CONFIGURED")
-
-    else:
-
-        print("Gemini API Key: NOT CONFIGURED")
-
-    print("Tutor Engine: READY")
-
-
-# ============================================================
-# DIRECT EXECUTION
-# ============================================================
-
-if __name__ == "__main__":
-
-    test_tutor_engine()

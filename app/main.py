@@ -16,8 +16,8 @@ from app.auth.session import (
 
 from app.ui.login import show_login
 from app.ui.register import show_register
-from app.ui.dashboard import show_dashboard
 from app.ui.tutor import show_tutor
+from app.ui.history import show_history
 from app.ui.accessibility import show_accessibility
 
 # ============================================================
@@ -56,14 +56,10 @@ apply_accessibility_style()
 
 
 # ============================================================
-# NOT LOGGED IN
+# LOGIN / REGISTER
 # ============================================================
 
 if not is_logged_in():
-
-    # --------------------------------------------------------
-    # HEADER
-    # --------------------------------------------------------
 
     st.title("♿ EduAccess AI")
 
@@ -79,10 +75,6 @@ if not is_logged_in():
 
     st.divider()
 
-    # --------------------------------------------------------
-    # LOGIN / REGISTER
-    # --------------------------------------------------------
-
     login_tab, register_tab = st.tabs(
         [
             "🔐 Login",
@@ -90,85 +82,76 @@ if not is_logged_in():
         ]
     )
 
-    # --------------------------------------------------------
-    # LOGIN
-    # --------------------------------------------------------
-
     with login_tab:
+
         show_login()
 
-    # --------------------------------------------------------
-    # REGISTER
-    # --------------------------------------------------------
-
     with register_tab:
+
         show_register()
 
 
 # ============================================================
-# LOGGED-IN USER
+# LOGGED-IN APPLICATION
 # ============================================================
 
 else:
 
-    # --------------------------------------------------------
-    # GET USER
-    # --------------------------------------------------------
-
-    user = st.session_state.get("user")
-
-    # --------------------------------------------------------
+    # ========================================================
     # SIDEBAR
+    # ========================================================
+
+    st.sidebar.title(
+        "♿ EduAccess AI"
+    )
+
+    st.sidebar.caption(
+        "Inclusive AI-Powered Education"
+    )
+
+    st.sidebar.divider()
+
+    # --------------------------------------------------------
+    # GET USER NAME
     # --------------------------------------------------------
 
-    with st.sidebar:
+    user_name = st.session_state.get(
+        "user_name",
+        "Student",
+    )
 
-        st.title("♿ EduAccess AI")
+    # --------------------------------------------------------
+    # NAVIGATION
+    # --------------------------------------------------------
 
-        if user:
+    page = st.sidebar.radio(
+        "Navigation",
+        [
+            "🏠 Dashboard",
+            "🤖 AI Tutor",
+            "📚 History",
+            "♿ Accessibility",
+        ],
+    )
 
-            user_name = getattr(
-                user,
-                "full_name",
-                "Student",
-            )
+    st.sidebar.divider()
 
-            st.write(
-                f"👤 **{user_name}**"
-            )
+    st.sidebar.write(
+        f"👤 **{user_name}**"
+    )
 
-        st.divider()
+    # ========================================================
+    # LOGOUT
+    # ========================================================
 
-        # ----------------------------------------------------
-        # NAVIGATION
-        # ----------------------------------------------------
+    if st.sidebar.button(
+        "🚪 Logout",
+        use_container_width=True,
+    ):
 
-        st.subheader("📚 Navigation")
+        logout_user()
 
-        page = st.radio(
-            "Select Page",
-            [
-                "🏠 Dashboard",
-                "🤖 AI Tutor",
-                "♿ Accessibility",
-            ],
-            label_visibility="collapsed",
-        )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # LOGOUT
-        # ----------------------------------------------------
-
-        if st.button(
-            "🚪 Logout",
-            use_container_width=True,
-        ):
-
-            logout_user()
-
-            st.rerun()
+        st.rerun()
 
     # ========================================================
     # DASHBOARD
@@ -176,7 +159,167 @@ else:
 
     if page == "🏠 Dashboard":
 
-        show_dashboard()
+        st.title(
+            "🎓 EduAccess AI Dashboard"
+        )
+
+        st.subheader(
+            f"Welcome, {user_name}! 👋"
+        )
+
+        st.write(
+            "Your personalized accessible "
+            "learning environment."
+        )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # PROFILE CARDS
+        # ----------------------------------------------------
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            st.info(
+                f"""
+### 👤 Student
+
+**{user_name}**
+"""
+            )
+
+        with col2:
+
+            disability_type = (
+                st.session_state.get(
+                    "disability_type",
+                    "Not specified",
+                )
+            )
+
+            st.info(
+                f"""
+### ♿ Accessibility
+
+**{disability_type}**
+"""
+            )
+
+        with col3:
+
+            st.success(
+                """
+### 🤖 AI Tutor
+
+**Available**
+"""
+            )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # FEATURES
+        # ----------------------------------------------------
+
+        st.subheader(
+            "🚀 EduAccess AI Features"
+        )
+
+        feature1, feature2, feature3 = st.columns(3)
+
+        with feature1:
+
+            st.markdown(
+                """
+### 🤖 AI Tutor
+
+Ask questions and receive
+personalized explanations.
+"""
+            )
+
+        with feature2:
+
+            st.markdown(
+                """
+### 📚 History
+
+View your previous AI Tutor
+questions and answers.
+"""
+            )
+
+        with feature3:
+
+            st.markdown(
+                """
+### ♿ Accessibility
+
+Customize your learning
+experience.
+"""
+            )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # ACCESSIBILITY SUPPORT
+        # ----------------------------------------------------
+
+        st.subheader(
+            "♿ Your Learning Support"
+        )
+
+        support1, support2, support3 = st.columns(3)
+
+        with support1:
+
+            st.markdown(
+                """
+🔊 **Audio Support**
+
+Text-to-Speech can help
+students who prefer listening.
+"""
+            )
+
+        with support2:
+
+            st.markdown(
+                """
+🧩 **Step-by-Step Learning**
+
+Complex concepts can be
+broken into smaller steps.
+"""
+            )
+
+        with support3:
+
+            st.markdown(
+                """
+🔎 **Readable Content**
+
+Clear formatting and
+accessible content improve readability.
+"""
+            )
+
+        st.divider()
+
+        st.info(
+            """
+💡 Use the sidebar to access:
+
+**🤖 AI Tutor** → Ask educational questions.
+
+**📚 History** → View previous conversations.
+
+**♿ Accessibility** → Customize your learning experience.
+"""
+        )
 
     # ========================================================
     # AI TUTOR
@@ -185,6 +328,14 @@ else:
     elif page == "🤖 AI Tutor":
 
         show_tutor()
+
+    # ========================================================
+    # HISTORY
+    # ========================================================
+
+    elif page == "📚 History":
+
+        show_history()
 
     # ========================================================
     # ACCESSIBILITY

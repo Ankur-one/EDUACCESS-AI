@@ -1,64 +1,303 @@
-import streamlit as st  # type: ignore
+import importlib
+from io import BytesIO
 
+from app.auth.session import get_current_user
 from app.ai.tutor_engine import ask_tutor
+
+# Load Streamlit dynamically so static analyzers do not require the optional
+# dependency to be installed in the editor's selected Python environment.
+st = importlib.import_module("streamlit")
+
+# Load gTTS dynamically because it is an optional runtime dependency.
+gTTS = importlib.import_module("gtts").gTTS
 
 
 # ============================================================
 # TEXT TO SPEECH
 # ============================================================
 
-def speak_text(text: str):
+def generate_speech(text, language="en"):
+    """
+    Convert text into MP3 speech.
+
+    Returns:
+        bytes | None
+    """
+
+    if text is None:
+        return None
+
+    # IMPORTANT:
+    # Always convert the answer to string.
+    # This prevents .strip() errors.
+    if not isinstance(text, str):
+        text = str(text)
+
+    text = text.strip()
+
+    if not text:
+        return None
+
     try:
-        import pyttsx3  # type: ignore
 
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 160)
-        engine.setProperty("volume", 1.0)
+        audio_buffer = BytesIO()
 
-        engine.say(text)
-        engine.runAndWait()
-
-    except Exception as e:
-        st.warning(
-            f"🔊 Text-to-Speech unavailable: {e}"
+        tts = gTTS(
+            text=text,
+            lang=language,
+            slow=False,
         )
 
+        tts.write_to_fp(audio_buffer)
+
+        audio_buffer.seek(0)
+
+        return audio_buffer.read()
+
+    except Exception as e:
+
+        st.error(
+            f"❌ Text-to-Speech error: {e}"
+        )
+
+        return None
+
 
 # ============================================================
-# INITIALIZE SESSION STATE
+# GET TTS LANGUAGE
 # ============================================================
 
-def initialize_tutor_state():
+def get_tts_language(user):
+    """
+    Convert user's preferred language
+    into a gTTS language code.
+    """
 
-    if "tutor_history" not in st.session_state:
-        st.session_state.tutor_history = []
+    preferred_language = getattr(
+        user,
+        "preferred_language",
+        "English",
+    )
 
-    if "tutor_question" not in st.session_state:
-        st.session_state.tutor_question = ""
+    if not isinstance(
+        preferred_language,
+        str,
+    ):
+        preferred_language = "English"
+
+    preferred_language = (
+        preferred_language.strip()
+    )
+
+    language_map = {
+        "English": "en",
+        "Hindi": "hi",
+        "Punjabi": "pa",
+        "Bengali": "bn",
+        "Gujarati": "gu",
+        "Marathi": "mr",
+        "Tamil": "ta",
+        "Telugu": "te",
+        "Kannada": "kn",
+        "Malayalam": "ml",
+        "Urdu": "ur",
+    }
+
+    return language_map.get(
+        preferred_language,
+        "en",
+    )
 
 
 # ============================================================
-# AI TUTOR PAGE
+# INITIALIZE CONVERSATION
+# ============================================================
+
+def initialize_chat_history():
+
+    if "conversation_history" not in st.session_state:
+
+        st.session_state[
+            "conversation_history"
+        ] = []
+
+
+# ============================================================
+# BUILD CONVERSATION CONTEXT
+# ============================================================
+
+def build_conversation_context():
+
+    history = st.session_state.get(
+        "conversation_history",
+        [],
+    )
+
+    if not history:
+        return None
+
+    context_parts = []
+
+    # Keep latest 10 messages
+    recent_history = history[-10:]
+
+    for item in recent_history:
+
+        role = item.get(
+            "role",
+            "",
+        )
+
+        content = item.get(
+            "content",
+            "",
+        )
+
+        if not isinstance(
+            content,
+            str,
+        ):
+            content = str(content)
+
+        content = content.strip()
+
+        if not content:
+            continue
+
+        if role == "user":
+
+            context_parts.append(
+                f"Student: {content}"
+            )
+
+        elif role == "assistant":
+
+            context_parts.append(
+                f"EduAccess AI: {content}"
+            )
+
+    if not context_parts:
+        return None
+
+    return "\n\n".join(
+        context_parts
+    )
+
+
+# ============================================================
+# CLEAR CHAT
+# ============================================================
+
+def clear_chat():
+
+    st.session_state[
+        "conversation_history"
+    ] = []
+
+    if "chat_history" in st.session_state:
+
+        st.session_state[
+            "chat_history"
+        ] = []
+
+    # Clear current question
+    st.session_state[
+        "tutor_question"
+    ] = ""
+
+    st.rerun()
+
+
+# ============================================================
+# DISPLAY CHAT HISTORY
+# ============================================================
+
+def display_chat_history():
+
+    history = st.session_state.get(
+        "conversation_history",
+        [],
+    )
+
+    for index, item in enumerate(history):
+
+        role = item.get(
+            "role",
+            "",
+        )
+
+        content = item.get(
+            "content",
+            "",
+        )
+
+        if not isinstance(
+            content,
+            str,
+        ):
+            content = str(content)
+
+        content = content.strip()
+
+        if not content:
+            continue
+
+        if role == "user":
+
+            with st.chat_message("user"):
+
+                st.markdown(
+                    content
+                )
+
+        elif role == "assistant":
+
+            with st.chat_message("assistant"):
+
+                st.markdown(
+                    content
+                )
+
+
+# ============================================================
+# AI TUTOR
 # ============================================================
 
 def show_tutor():
 
-    initialize_tutor_state()
+    # --------------------------------------------------------
+    # Initialize
+    # --------------------------------------------------------
+
+    initialize_chat_history()
+
+    # --------------------------------------------------------
+    # Get current user
+    # --------------------------------------------------------
+
+    user = get_current_user()
+
+    if user is None:
+
+        st.warning(
+            "⚠️ User session not found. "
+            "Please login again."
+        )
+
+        return
 
     # ========================================================
     # HEADER
     # ========================================================
 
-    st.title("🤖 EduAccess AI Tutor")
+    st.title(
+        "🤖 EduAccess AI Tutor"
+    )
 
-    st.markdown(
-        """
-        ### Your Personalized Learning Assistant
-
-        Ask educational questions using text or voice.
-        EduAccess AI will provide an accessible,
-        personalized explanation.
-        """
+    st.write(
+        "Ask educational questions using text or voice. "
+        "EduAccess AI provides personalized and accessible "
+        "explanations."
     )
 
     st.divider()
@@ -69,149 +308,162 @@ def show_tutor():
 
     with st.sidebar:
 
-        st.subheader("⚙️ Tutor Controls")
+        st.subheader(
+            "🤖 AI Tutor"
+        )
+
+        student_name = getattr(
+            user,
+            "full_name",
+            "Student",
+        )
+
+        if not isinstance(
+            student_name,
+            str,
+        ):
+            student_name = "Student"
+
+        st.write(
+            f"Student: **{student_name}**"
+        )
+
+        st.divider()
+
+        st.subheader(
+            "♿ Accessibility"
+        )
+
+        preferred_language = getattr(
+            user,
+            "preferred_language",
+            "English",
+        )
+
+        st.write(
+            f"Language: **{preferred_language}**"
+        )
+
+        disability_type = getattr(
+            user,
+            "disability_type",
+            None,
+        )
+
+        if disability_type:
+
+            st.write(
+                f"Support: **{disability_type}**"
+            )
+
+        st.divider()
+
+        # ----------------------------------------------------
+        # CLEAR CHAT
+        # ----------------------------------------------------
 
         if st.button(
             "🗑️ Clear Conversation",
             use_container_width=True,
         ):
 
-            st.session_state.tutor_history = []
-            st.session_state.tutor_question = ""
+            clear_chat()
 
-            st.rerun()
+    # ========================================================
+    # VOICE OUTPUT SETTING
+    # ========================================================
 
-        st.divider()
+    st.subheader(
+        "🔊 Voice Output"
+    )
 
-        st.write(
-            f"💬 Questions asked: "
-            f"{len(st.session_state.tutor_history)}"
+    automatic_voice = st.checkbox(
+        "🔊 Automatically read AI answers aloud",
+        value=st.session_state.get(
+            "voice_output_enabled",
+            False,
+        ),
+        key="voice_output_enabled",
+    )
+
+    if automatic_voice:
+
+        st.info(
+            "🔊 Automatic voice output is enabled. "
+            "AI answers will be converted to speech."
         )
-
-    # ========================================================
-    # CONVERSATION HISTORY
-    # ========================================================
-
-    if st.session_state.tutor_history:
-
-        st.subheader("💬 Conversation")
-
-        for index, chat in enumerate(
-            st.session_state.tutor_history
-        ):
-
-            with st.chat_message("user"):
-
-                st.markdown(
-                    chat["question"]
-                )
-
-            with st.chat_message("assistant"):
-
-                st.markdown(
-                    chat["answer"]
-                )
-
-                if st.button(
-                    "🔊 Read Answer",
-                    key=f"tts_answer_{index}",
-                ):
-
-                    speak_text(
-                        chat["answer"]
-                    )
-
-        st.divider()
 
     else:
 
-        st.info(
-            "💡 No conversation yet. "
-            "Ask your first question below."
+        st.caption(
+            "Automatic voice output is disabled. "
+            "You can manually click "
+            "'Read Answer Aloud'."
         )
+
+    st.divider()
+
+    # ========================================================
+    # PREVIOUS CONVERSATION
+    # ========================================================
+
+    display_chat_history()
+
+    st.divider()
 
     # ========================================================
     # QUESTION INPUT
     # ========================================================
 
-    st.subheader("📝 Ask Your Question")
+    st.subheader(
+        "💬 Ask your question"
+    )
 
     question = st.text_area(
-        "Type your question:",
-        value=st.session_state.tutor_question,
+        "Enter your question:",
+        key="tutor_question",
+        height=120,
         placeholder=(
             "Example: Explain machine learning "
             "in simple language."
         ),
-        height=120,
-        key="tutor_question_box",
     )
 
-    # ========================================================
-    # IMPORTANT:
-    # SAVE THE CURRENT TEXT IMMEDIATELY
-    # ========================================================
-
-    st.session_state.tutor_question = question
-
-    # ========================================================
-    # VOICE INPUT
-    # ========================================================
-
-    st.subheader("🎤 Voice Input")
-
-    audio = st.audio_input(
-        "Click here and speak your question"
+    st.caption(
+        "🎤 Voice input can place recognized speech "
+        "into this question box."
     )
-
-    if audio is not None:
-
-        st.audio(
-            audio,
-            format="audio/wav",
-        )
-
-        st.info(
-            "🎤 Voice recording received."
-        )
 
     # ========================================================
     # ASK BUTTON
     # ========================================================
 
-    st.divider()
-
-    ask_clicked = st.button(
-        "🤖 Ask EduAccess AI",
+    ask_button = st.button(
+        "🤖 Ask Question",
         type="primary",
         use_container_width=True,
     )
 
-    if not ask_clicked:
+    if not ask_button:
+
         return
 
     # ========================================================
-    # GET QUESTION FROM SESSION STATE
+    # PERMANENT QUESTION VALIDATION
     # ========================================================
 
-    question = st.session_state.get(
-        "tutor_question",
-        "",
-    )
-
-    # Ensure question is a string
     if question is None:
+
         question = ""
 
-    if not isinstance(question, str):
+    elif not isinstance(
+        question,
+        str,
+    ):
 
         question = str(question)
 
     question = question.strip()
-
-    # ========================================================
-    # VALIDATE QUESTION
-    # ========================================================
 
     if not question:
 
@@ -222,122 +474,224 @@ def show_tutor():
         return
 
     # ========================================================
-    # GET LOGGED-IN USER
+    # BUILD CONTEXT BEFORE ADDING NEW MESSAGE
     # ========================================================
 
-    user = st.session_state.get(
-        "user"
-    )
-
-    if user is None:
-
-        st.error(
-            "❌ User session not found. "
-            "Please login again."
-        )
-
-        return
+    context = build_conversation_context()
 
     # ========================================================
-    # BUILD CONVERSATION CONTEXT
+    # SHOW USER QUESTION
     # ========================================================
 
-    conversation_context = ""
+    with st.chat_message("user"):
 
-    for chat in st.session_state.tutor_history:
-
-        old_question = str(
-            chat.get(
-                "question",
-                "",
-            )
-        )
-
-        old_answer = str(
-            chat.get(
-                "answer",
-                "",
-            )
-        )
-
-        conversation_context += (
-            f"Student: {old_question}\n"
-            f"EduAccess AI: {old_answer}\n\n"
+        st.markdown(
+            question
         )
 
     # ========================================================
     # ASK GEMINI
     # ========================================================
 
-    with st.spinner(
-        "🤖 EduAccess AI is thinking..."
-    ):
+    with st.chat_message("assistant"):
 
-        try:
+        with st.spinner(
+            "🤖 EduAccess AI is thinking..."
+        ):
 
-            answer = ask_tutor(
-                user=user,
-                question=question,
-                context=conversation_context,
+            try:
+
+                # Preferred version
+                answer = ask_tutor(
+                    user=user,
+                    question=question,
+                    context=context,
+                )
+
+            except TypeError as e:
+
+                # Compatibility with older ask_tutor()
+                # that does not accept context.
+                if "context" in str(e):
+
+                    answer = ask_tutor(
+                        user=user,
+                        question=question,
+                    )
+
+                else:
+
+                    answer = (
+                        "❌ AI Tutor error:\n\n"
+                        f"{str(e)}"
+                    )
+
+            except Exception as e:
+
+                answer = (
+                    "❌ AI Tutor error:\n\n"
+                    f"{str(e)}"
+                )
+
+        # ----------------------------------------------------
+        # Guarantee answer is text
+        # ----------------------------------------------------
+
+        if answer is None:
+
+            answer = (
+                "⚠️ Sorry, I could not generate "
+                "an answer."
             )
 
-        except TypeError:
+        if not isinstance(
+            answer,
+            str,
+        ):
 
-            # ------------------------------------------------
-            # Compatibility fallback:
-            # If an older tutor_engine.py does not support
-            # context, still answer the question.
-            # ------------------------------------------------
+            answer = str(answer)
 
-            answer = ask_tutor(
-                user,
-                question,
-            )
+        answer = answer.strip()
 
-        except Exception as e:
+        # ----------------------------------------------------
+        # Display answer
+        # ----------------------------------------------------
 
-            st.error(
-                "❌ AI Tutor error:\n\n"
-                f"{str(e)}"
-            )
-
-            return
-
-    # ========================================================
-    # ENSURE ANSWER IS TEXT
-    # ========================================================
-
-    if answer is None:
-
-        answer = (
-            "⚠️ Sorry, no answer was generated."
+        st.markdown(
+            answer
         )
 
-    elif not isinstance(answer, str):
-
-        answer = str(answer)
-
-    answer = answer.strip()
-
     # ========================================================
-    # SAVE CONVERSATION
+    # SAVE USER MESSAGE
     # ========================================================
 
-    st.session_state.tutor_history.append(
+    st.session_state[
+        "conversation_history"
+    ].append(
         {
-            "question": question,
-            "answer": answer,
+            "role": "user",
+            "content": question,
         }
     )
 
     # ========================================================
-    # CLEAR QUESTION AFTER SUCCESS
+    # SAVE AI ANSWER
     # ========================================================
 
-    st.session_state.tutor_question = ""
+    st.session_state[
+        "conversation_history"
+    ].append(
+        {
+            "role": "assistant",
+            "content": answer,
+        }
+    )
 
     # ========================================================
-    # SHOW RESULT
+    # TEXT TO SPEECH
     # ========================================================
 
-    st.rerun()
+    st.divider()
+
+    st.subheader(
+        "🔊 Listen to Answer"
+    )
+
+    # --------------------------------------------------------
+    # Get language
+    # --------------------------------------------------------
+
+    tts_language = get_tts_language(
+        user
+    )
+
+    # ========================================================
+    # AUTOMATIC VOICE OUTPUT
+    # ========================================================
+
+    if automatic_voice:
+
+        with st.spinner(
+            "🔊 Preparing voice output..."
+        ):
+
+            audio_data = generate_speech(
+                answer,
+                language=tts_language,
+            )
+
+        if audio_data:
+
+            st.audio(
+                audio_data,
+                format="audio/mp3",
+                autoplay=True,
+            )
+
+            st.success(
+                "🔊 AI answer is ready to play."
+            )
+
+        else:
+
+            st.warning(
+                "⚠️ Voice output could not be generated."
+            )
+
+    # ========================================================
+    # MANUAL VOICE OUTPUT
+    # ========================================================
+
+    else:
+
+        speak_button = st.button(
+            "🔊 Read Answer Aloud",
+            key=(
+                "speak_answer_"
+                + str(
+                    len(
+                        st.session_state[
+                            "conversation_history"
+                        ]
+                    )
+                )
+            ),
+            use_container_width=True,
+        )
+
+        if speak_button:
+
+            with st.spinner(
+                "🔊 Preparing audio..."
+            ):
+
+                audio_data = generate_speech(
+                    answer,
+                    language=tts_language,
+                )
+
+            if audio_data:
+
+                st.audio(
+                    audio_data,
+                    format="audio/mp3",
+                )
+
+                st.success(
+                    "🔊 Audio is ready."
+                )
+
+            else:
+
+                st.warning(
+                    "⚠️ Could not generate audio. "
+                    "Please try again."
+                )
+
+    # ========================================================
+    # CLEAR INPUT
+    # ========================================================
+
+    st.session_state[
+        "tutor_question"
+    ] = ""

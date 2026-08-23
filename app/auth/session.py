@@ -1,17 +1,9 @@
-"""Session-state helpers with an optional Streamlit dependency."""
+import importlib
 
-try:
-    import importlib
 
-    st = importlib.import_module("streamlit")
-except ModuleNotFoundError:
-    class _SessionState(dict):
-        """Minimal fallback used when this module is imported outside Streamlit."""
-
-    class _StreamlitFallback:
-        session_state = _SessionState()
-
-    st = _StreamlitFallback()
+# Load Streamlit dynamically so this module can still be inspected in
+# environments where the optional Streamlit dependency is not installed.
+st = importlib.import_module("streamlit")
 
 
 # ============================================================
@@ -29,6 +21,8 @@ def initialize_session():
         "user_id": None,
         "user_name": None,
         "disability_type": None,
+
+        # AI Tutor
         "chat_history": [],
         "conversation_history": [],
     }
@@ -45,10 +39,7 @@ def initialize_session():
 
 def create_login_session(user):
     """
-    Create a complete login session for the authenticated user.
-
-    This function is kept for compatibility with the existing
-    app/ui/login.py.
+    Create the login session using the authenticated User object.
     """
 
     if user is None:
@@ -90,10 +81,7 @@ def create_login_session(user):
 
 def login_user(user):
     """
-    New preferred login function.
-
-    Internally uses create_login_session() so both old and
-    new code work correctly.
+    Preferred login function.
     """
 
     return create_login_session(user)
@@ -105,7 +93,7 @@ def login_user(user):
 
 def is_logged_in():
     """
-    Return True only when a valid User object exists.
+    Check whether a valid user is logged in.
     """
 
     user = st.session_state.get("user")
@@ -122,10 +110,97 @@ def is_logged_in():
 
 def get_current_user():
     """
-    Return the currently logged-in User object.
+    Return the complete logged-in User object.
     """
 
     return st.session_state.get("user")
+
+
+# ============================================================
+# GET CURRENT USER ID
+# ============================================================
+
+def get_current_user_id():
+    """
+    Return the ID of the currently logged-in user.
+    """
+
+    # First use the stored session ID
+    user_id = st.session_state.get("user_id")
+
+    if user_id is not None:
+        return user_id
+
+    # Fallback: get ID from User object
+    user = st.session_state.get("user")
+
+    if user is not None:
+        user_id = getattr(
+            user,
+            "id",
+            None,
+        )
+
+        if user_id is not None:
+            st.session_state["user_id"] = user_id
+
+        return user_id
+
+    return None
+
+
+# ============================================================
+# GET CURRENT USER NAME
+# ============================================================
+
+def get_current_user_name():
+    """
+    Return the current student's name.
+    """
+
+    user_name = st.session_state.get("user_name")
+
+    if user_name:
+        return user_name
+
+    user = st.session_state.get("user")
+
+    if user is not None:
+        return getattr(
+            user,
+            "full_name",
+            "Student",
+        )
+
+    return None
+
+
+# ============================================================
+# GET CURRENT DISABILITY TYPE
+# ============================================================
+
+def get_current_disability_type():
+    """
+    Return the current student's disability type.
+    """
+
+    disability_type = st.session_state.get(
+        "disability_type"
+    )
+
+    if disability_type:
+        return disability_type
+
+    user = st.session_state.get("user")
+
+    if user is not None:
+        return getattr(
+            user,
+            "disability_type",
+            None,
+        )
+
+    return None
 
 
 # ============================================================
@@ -151,3 +226,15 @@ def logout_user():
     st.session_state["chat_history"] = []
 
     st.session_state["conversation_history"] = []
+
+
+# ============================================================
+# CLEAR SESSION
+# ============================================================
+
+def clear_session():
+    """
+    Alias for logout_user().
+    """
+
+    logout_user()

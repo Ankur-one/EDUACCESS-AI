@@ -1,12 +1,23 @@
+from datetime import datetime
+
 from sqlalchemy import (  # type: ignore[import-not-found]
     Column,
     Integer,
     String,
     Boolean,
+    Text,
+    DateTime,
+    ForeignKey,
 )
+
+from sqlalchemy.orm import relationship  # type: ignore[import-not-found]
 
 from app.database.database import Base
 
+
+# ============================================================
+# USER MODEL
+# ============================================================
 
 class User(Base):
 
@@ -117,4 +128,84 @@ class User(Base):
     dyslexia_friendly = Column(
         Boolean,
         default=False,
+    )
+
+    # ========================================================
+    # RELATIONSHIP WITH TUTOR CONVERSATIONS
+    # ========================================================
+
+    tutor_conversations = relationship(
+        "TutorConversation",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+# ============================================================
+# TUTOR CONVERSATION MODEL
+# ============================================================
+
+class TutorConversation(Base):
+
+    __tablename__ = "tutor_conversations"
+
+    # ========================================================
+    # PRIMARY KEY
+    # ========================================================
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    # ========================================================
+    # USER ID
+    # ========================================================
+
+    user_id = Column(
+        Integer,
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+
+    # ========================================================
+    # STUDENT QUESTION
+    # ========================================================
+
+    question = Column(
+        Text,
+        nullable=False,
+    )
+
+    # ========================================================
+    # AI ANSWER
+    # ========================================================
+
+    answer = Column(
+        Text,
+        nullable=False,
+    )
+
+    # ========================================================
+    # CREATED TIME
+    # ========================================================
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    # ========================================================
+    # RELATIONSHIP
+    # ========================================================
+
+    user = relationship(
+        "User",
+        back_populates="tutor_conversations",
     )
