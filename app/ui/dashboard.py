@@ -1,314 +1,440 @@
-import streamlit as st  # type: ignore[reportMissingImports]
+import importlib
+
+from app.auth.session import get_current_user_id
+from app.database.database import SessionLocal
+from app.database.models import User
+from app.database.tutor_crud import get_user_conversations
+
+st = importlib.import_module("streamlit")
 
 
 # ============================================================
-# EDUACCESS AI — STUDENT DASHBOARD
+# SHOW DASHBOARD
 # ============================================================
 
 def show_dashboard():
-    """
-    Main student dashboard for EduAccess AI.
-    """
 
-    user = st.session_state.get("user")
+    st.title("🏠 EduAccess AI Dashboard")
 
-    if user is None:
-        st.error("⚠️ User session not found. Please login again.")
+    st.caption(
+        "Your personalized learning and accessibility dashboard."
+    )
+
+    st.divider()
+
+    # ========================================================
+    # GET CURRENT USER
+    # ========================================================
+
+    user_id = get_current_user_id()
+
+    if not user_id:
+
+        st.warning(
+            "⚠️ User session not found. Please login again."
+        )
+
         return
 
     # ========================================================
-    # HEADER
+    # DATABASE
     # ========================================================
 
-    st.title("🎓 EduAccess AI Dashboard")
+    db = SessionLocal()
 
-    user_name = getattr(
-        user,
-        "full_name",
-        "Student",
-    )
+    try:
 
-    st.subheader(
-        f"Welcome, {user_name}! 👋"
-    )
+        # ====================================================
+        # GET USER
+        # ====================================================
 
-    st.write(
-        "Your personalized accessible learning environment."
-    )
-
-    st.divider()
-
-    # ========================================================
-    # BASIC USER INFORMATION
-    # ========================================================
-
-    disability_type = getattr(
-        user,
-        "disability_type",
-        None,
-    ) or "Not specified"
-
-    preferred_language = getattr(
-        user,
-        "preferred_language",
-        None,
-    ) or "English"
-
-    # ========================================================
-    # PROFILE CARDS
-    # ========================================================
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.info(
-            f"""
-### 👤 Student
-
-**{user_name}**
-
-Language: **{preferred_language}**
-"""
+        user = (
+            db.query(User)
+            .filter(
+                User.id == user_id
+            )
+            .first()
         )
 
-    with col2:
-        st.info(
-            f"""
-### ♿ Accessibility
+        if user is None:
 
-**{disability_type}**
-
-Personalized support enabled.
-"""
-        )
-
-    with col3:
-        st.success(
-            """
-### 🤖 AI Tutor
-
-**Available**
-
-Ask questions anytime.
-"""
-        )
-
-    st.divider()
-
-    # ========================================================
-    # LEARNING FEATURES
-    # ========================================================
-
-    st.subheader("🚀 Learning Features")
-
-    feature1, feature2, feature3 = st.columns(3)
-
-    with feature1:
-        st.markdown(
-            """
-### 🤖 AI Tutor
-
-Ask educational questions and
-receive personalized explanations.
-"""
-        )
-
-        if st.button(
-            "Open AI Tutor",
-            use_container_width=True,
-        ):
-            st.session_state["page"] = "AI Tutor"
-            st.rerun()
-
-    with feature2:
-        st.markdown(
-            """
-### ♿ Accessibility
-
-Customize your learning experience
-according to your accessibility needs.
-"""
-        )
-
-        if st.button(
-            "Accessibility Settings",
-            use_container_width=True,
-        ):
-            st.session_state["page"] = "Accessibility"
-            st.rerun()
-
-    with feature3:
-        st.markdown(
-            """
-### 🔊 Voice Support
-
-Use speech input and listen to
-AI-generated educational answers.
-"""
-        )
-
-        st.success("Voice features available")
-
-    st.divider()
-
-    # ========================================================
-    # ACCESSIBILITY SUPPORT
-    # ========================================================
-
-    st.subheader("♿ Your Accessibility Support")
-
-    support1, support2, support3, support4 = st.columns(4)
-
-    simple_explanation = bool(
-        getattr(
-            user,
-            "simple_explanation",
-            False,
-        )
-    )
-
-    step_by_step = bool(
-        getattr(
-            user,
-            "step_by_step",
-            False,
-        )
-    )
-
-    repetition_support = bool(
-        getattr(
-            user,
-            "repetition_support",
-            False,
-        )
-    )
-
-    visual_explanation = bool(
-        getattr(
-            user,
-            "visual_explanation",
-            False,
-        )
-    )
-
-    with support1:
-        if simple_explanation:
-            st.success("✅ Simple\nExplanation")
-        else:
-            st.info("○ Simple\nExplanation")
-
-    with support2:
-        if step_by_step:
-            st.success("✅ Step-by-Step")
-        else:
-            st.info("○ Step-by-Step")
-
-    with support3:
-        if repetition_support:
-            st.success("✅ Repetition\nSupport")
-        else:
-            st.info("○ Repetition\nSupport")
-
-    with support4:
-        if visual_explanation:
-            st.success("✅ Visual\nExplanation")
-        else:
-            st.info("○ Visual\nExplanation")
-
-    st.divider()
-
-    # ========================================================
-    # LEARNING ACTIVITY
-    # ========================================================
-
-    st.subheader("📊 Learning Activity")
-
-    history = st.session_state.get(
-        "tutor_history",
-        [],
-    )
-
-    question_count = len(history)
-
-    activity1, activity2, activity3 = st.columns(3)
-
-    with activity1:
-        st.metric(
-            "Questions Asked",
-            question_count,
-        )
-
-    with activity2:
-        st.metric(
-            "AI Tutor",
-            "Available",
-        )
-
-    with activity3:
-        st.metric(
-            "Accessibility",
-            "Enabled",
-        )
-
-    st.divider()
-
-    # ========================================================
-    # RECENT QUESTIONS
-    # ========================================================
-
-    st.subheader("📝 Recent Questions")
-
-    if history:
-
-        # Display latest questions first
-        recent_history = history[-5:][::-1]
-
-        for index, item in enumerate(
-            recent_history,
-            start=1,
-        ):
-
-            if isinstance(item, dict):
-
-                question = item.get(
-                    "question",
-                    "Unknown question",
-                )
-
-            else:
-
-                question = str(item)
-
-            st.markdown(
-                f"""
-**{index}.** {question}
-"""
+            st.error(
+                "❌ User account could not be found."
             )
 
-    else:
+            return
 
-        st.info(
-            "No questions asked yet. "
-            "Start learning with the AI Tutor!"
+        # ====================================================
+        # GET TUTOR HISTORY
+        # ====================================================
+
+        conversations = get_user_conversations(
+            db=db,
+            user_id=user_id,
+            limit=100,
         )
 
-    st.divider()
+        # ====================================================
+        # WELCOME
+        # ====================================================
+
+        st.subheader(
+            f"👋 Welcome, {user.full_name}!"
+        )
+
+        st.write(
+            "EduAccess AI is ready to help you learn "
+            "in a way that matches your accessibility "
+            "preferences."
+        )
+
+        st.divider()
+
+        # ====================================================
+        # STATISTICS
+        # ====================================================
+
+        total_questions = len(
+            conversations
+        )
+
+        active_dates = set()
+
+        for conversation in conversations:
+
+            created_at = getattr(
+                conversation,
+                "created_at",
+                None,
+            )
+
+            if created_at:
+
+                active_dates.add(
+                    created_at.date()
+                )
+
+        active_days = len(
+            active_dates
+        )
+
+        # ====================================================
+        # STAT CARDS
+        # ====================================================
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+
+            st.metric(
+                "💬 Questions",
+                total_questions,
+            )
+
+        with col2:
+
+            st.metric(
+                "🤖 AI Answers",
+                total_questions,
+            )
+
+        with col3:
+
+            st.metric(
+                "📅 Active Days",
+                active_days,
+            )
+
+        with col4:
+
+            st.metric(
+                "♿ Accessibility",
+                "Enabled",
+            )
+
+        st.divider()
+
+        # ====================================================
+        # QUICK ACTIONS
+        # ====================================================
+
+        st.subheader(
+            "🚀 Quick Actions"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            if st.button(
+                "🤖 Open AI Tutor",
+                use_container_width=True,
+                type="primary",
+                key="dashboard_open_tutor",
+            ):
+
+                st.session_state[
+                    "selected_page"
+                ] = "AI Tutor"
+
+                st.rerun()
+
+        with col2:
+
+            if st.button(
+                "📚 View Tutor History",
+                use_container_width=True,
+                key="dashboard_open_history",
+            ):
+
+                st.session_state[
+                    "selected_page"
+                ] = "History"
+
+                st.rerun()
+
+        st.divider()
+
+        # ====================================================
+        # ACCESSIBILITY PROFILE
+        # ====================================================
+
+        st.subheader(
+            "♿ Your Accessibility Preferences"
+        )
+
+        preferences = []
+
+        if user.simple_explanation:
+
+            preferences.append(
+                "Simple explanations"
+            )
+
+        if user.step_by_step:
+
+            preferences.append(
+                "Step-by-step learning"
+            )
+
+        if user.repetition_support:
+
+            preferences.append(
+                "Repetition support"
+            )
+
+        if user.visual_explanation:
+
+            preferences.append(
+                "Visual explanations"
+            )
+
+        if user.text_to_speech:
+
+            preferences.append(
+                "Text-to-speech"
+            )
+
+        if user.speech_to_text:
+
+            preferences.append(
+                "Speech-to-text"
+            )
+
+        if user.large_text:
+
+            preferences.append(
+                "Large text"
+            )
+
+        if user.high_contrast:
+
+            preferences.append(
+                "High contrast"
+            )
+
+        if user.dyslexia_friendly:
+
+            preferences.append(
+                "Dyslexia-friendly mode"
+            )
+
+        if preferences:
+
+            for preference in preferences:
+
+                st.write(
+                    f"✓ {preference}"
+                )
+
+        else:
+
+            st.info(
+                "No additional accessibility "
+                "preferences are enabled."
+            )
+
+        st.divider()
+
+        # ====================================================
+        # LANGUAGE
+        # ====================================================
+
+        st.subheader(
+            "🌐 Learning Language"
+        )
+
+        st.info(
+            user.preferred_language
+            or "English"
+        )
+
+        st.divider()
+
+        # ====================================================
+        # RECENT ACTIVITY
+        # ====================================================
+
+        st.subheader(
+            "🕒 Recent Learning Activity"
+        )
+
+        if not conversations:
+
+            st.info(
+                "📭 No learning activity yet."
+            )
+
+            st.write(
+                "Start by asking a question in "
+                "the AI Tutor."
+            )
+
+        else:
+
+            # Latest five conversations
+            recent = list(
+                reversed(
+                    conversations[-5:]
+                )
+            )
+
+            for conversation in recent:
+
+                created_at = getattr(
+                    conversation,
+                    "created_at",
+                    None,
+                )
+
+                if created_at:
+
+                    time_text = created_at.strftime(
+                        "%d %b %Y, %I:%M %p"
+                    )
+
+                else:
+
+                    time_text = (
+                        "Date unavailable"
+                    )
+
+                question = (
+                    conversation.question
+                    or "Question unavailable"
+                )
+
+                with st.container(
+                    border=True
+                ):
+
+                    st.markdown(
+                        f"**💬 {question}**"
+                    )
+
+                    st.caption(
+                        f"🕒 {time_text}"
+                    )
+
+                    answer = (
+                        conversation.answer
+                        or ""
+                    )
+
+                    if answer:
+
+                        preview = answer.strip()
+
+                        if len(preview) > 180:
+
+                            preview = (
+                                preview[:180]
+                                + "..."
+                            )
+
+                        st.write(
+                            preview
+                        )
+
+        st.divider()
+
+        # ====================================================
+        # DISABILITY INFORMATION
+        # ====================================================
+
+        st.subheader(
+            "ℹ️ Accessibility Profile"
+        )
+
+        disability_type = getattr(
+            user,
+            "disability_type",
+            None,
+        )
+
+        disability_details = getattr(
+            user,
+            "disability_details",
+            None,
+        )
+
+        if disability_type:
+
+            st.write(
+                f"**Accessibility need:** "
+                f"{disability_type}"
+            )
+
+        if disability_details:
+
+            st.write(
+                f"**Additional information:** "
+                f"{disability_details}"
+            )
+
+        if not disability_type and not disability_details:
+
+            st.info(
+                "No additional accessibility "
+                "information provided."
+            )
 
     # ========================================================
-    # QUICK ACTION
+    # ERROR HANDLING
     # ========================================================
 
-    st.subheader("⚡ Quick Start")
+    except Exception as error:
 
-    st.write(
-        "Ready to learn? Ask EduAccess AI a question."
-    )
+        st.error(
+            "❌ Unable to load dashboard."
+        )
 
-    if st.button(
-        "✨ Start Learning",
-        use_container_width=True,
-    ):
+        st.exception(error)
 
-        st.session_state["page"] = "AI Tutor"
+    # ========================================================
+    # CLOSE DATABASE
+    # ========================================================
 
-        st.rerun()
+    finally:
+
+        db.close()

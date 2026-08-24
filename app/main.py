@@ -1,32 +1,43 @@
-import streamlit as st  # type: ignore[import-not-found]
+import importlib
+
 
 # ============================================================
-# AUTHENTICATION & SESSION
+# AUTH SESSION
 # ============================================================
 
 from app.auth.session import (
     initialize_session,
     is_logged_in,
     logout_user,
+    get_current_user_id,
 )
 
+
 # ============================================================
-# UI PAGES
+# DATABASE
+# ============================================================
+
+from app.database.database import SessionLocal
+from app.database.models import User
+
+
+# ============================================================
+# UI MODULES
 # ============================================================
 
 from app.ui.login import show_login
-from app.ui.register import show_register
+from app.ui.dashboard import show_dashboard
 from app.ui.tutor import show_tutor
 from app.ui.history import show_history
-from app.ui.accessibility import show_accessibility
-
-# ============================================================
-# ACCESSIBILITY STYLE
-# ============================================================
-
-from app.ui.accessibility_style import (
-    apply_accessibility_style,
+from app.ui.settings import show_settings
+from app.ui.accessibility import (
+    apply_accessibility_styles,
 )
+
+
+# Load Streamlit dynamically so static analysis does not require the
+# optional UI dependency to be installed in its analysis environment.
+st = importlib.import_module("streamlit")
 
 
 # ============================================================
@@ -49,298 +60,236 @@ initialize_session()
 
 
 # ============================================================
-# APPLY ACCESSIBILITY STYLE
+# GLOBAL CSS
 # ============================================================
 
-apply_accessibility_style()
+st.markdown(
+    """
+    <style>
+
+    .main {
+        padding-top: 1rem;
+    }
+
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    button {
+        min-height: 42px;
+    }
+
+    p {
+        line-height: 1.6;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
-# LOGIN / REGISTER
+# LOGIN CHECK
 # ============================================================
 
 if not is_logged_in():
 
+    show_login()
+
+    st.stop()
+
+
+# ============================================================
+# APPLY USER ACCESSIBILITY SETTINGS
+# ============================================================
+
+current_user_id = get_current_user_id()
+
+if current_user_id:
+
+    accessibility_db = SessionLocal()
+
+    try:
+
+        current_user = (
+            accessibility_db.query(User)
+            .filter(
+                User.id == current_user_id
+            )
+            .first()
+        )
+
+        if current_user:
+
+            apply_accessibility_styles(
+                current_user
+            )
+
+    except Exception:
+
+        # Do not stop the complete application if
+        # accessibility CSS fails.
+
+        st.warning(
+            "⚠️ Accessibility preferences "
+            "could not be applied."
+        )
+
+        # Keep the actual error hidden from normal users.
+
+    finally:
+
+        accessibility_db.close()
+
+
+# ============================================================
+# DEFAULT PAGE
+# ============================================================
+
+if "selected_page" not in st.session_state:
+
+    st.session_state.selected_page = (
+        "Dashboard"
+    )
+
+
+# ============================================================
+# SIDEBAR NAVIGATION
+# ============================================================
+
+with st.sidebar:
+
     st.title("♿ EduAccess AI")
 
-    st.markdown(
-        """
-        ### Inclusive AI-Powered Education
-
-        EduAccess AI is an AI-powered learning platform
-        designed to support students with different
-        disabilities and accessibility needs.
-        """
+    st.caption(
+        "Inclusive Educational Assistant"
     )
 
     st.divider()
 
-    login_tab, register_tab = st.tabs(
-        [
-            "🔐 Login",
-            "📝 Register",
-        ]
-    )
-
-    with login_tab:
-
-        show_login()
-
-    with register_tab:
-
-        show_register()
-
-
-# ============================================================
-# LOGGED-IN APPLICATION
-# ============================================================
-
-else:
-
     # ========================================================
-    # SIDEBAR
+    # AVAILABLE PAGES
     # ========================================================
 
-    st.sidebar.title(
-        "♿ EduAccess AI"
-    )
+    navigation_pages = [
+        "Dashboard",
+        "AI Tutor",
+        "History",
+        "Settings",
+    ]
 
-    st.sidebar.caption(
-        "Inclusive AI-Powered Education"
-    )
+    # ========================================================
+    # SAFETY CHECK
+    # ========================================================
 
-    st.sidebar.divider()
+    if (
+        st.session_state.selected_page
+        not in navigation_pages
+    ):
 
-    # --------------------------------------------------------
-    # GET USER NAME
-    # --------------------------------------------------------
+        st.session_state.selected_page = (
+            "Dashboard"
+        )
 
-    user_name = st.session_state.get(
-        "user_name",
-        "Student",
-    )
-
-    # --------------------------------------------------------
+    # ========================================================
     # NAVIGATION
-    # --------------------------------------------------------
+    # ========================================================
 
-    page = st.sidebar.radio(
+    page = st.radio(
         "Navigation",
-        [
-            "🏠 Dashboard",
-            "🤖 AI Tutor",
-            "📚 History",
-            "♿ Accessibility",
-        ],
+        navigation_pages,
+        index=navigation_pages.index(
+            st.session_state.selected_page
+        ),
+        key="main_navigation",
     )
 
-    st.sidebar.divider()
+    # ========================================================
+    # SAVE CURRENT PAGE
+    # ========================================================
 
-    st.sidebar.write(
-        f"👤 **{user_name}**"
+    st.session_state.selected_page = page
+
+    st.divider()
+
+    # ========================================================
+    # ACCESSIBILITY INFORMATION
+    # ========================================================
+
+    st.caption(
+        "♿ Accessibility support enabled"
     )
+
+    st.caption(
+        "Customize your experience from "
+        "Settings."
+    )
+
+    st.divider()
 
     # ========================================================
     # LOGOUT
     # ========================================================
 
-    if st.sidebar.button(
+    if st.button(
         "🚪 Logout",
         use_container_width=True,
+        key="main_logout_button",
     ):
 
         logout_user()
 
+        # Reset selected page
+        st.session_state.selected_page = (
+            "Dashboard"
+        )
+
+        # Remove navigation widget state
+        if "main_navigation" in st.session_state:
+
+            del st.session_state[
+                "main_navigation"
+            ]
+
         st.rerun()
 
-    # ========================================================
-    # DASHBOARD
-    # ========================================================
 
-    if page == "🏠 Dashboard":
+# ============================================================
+# PAGE ROUTING
+# ============================================================
 
-        st.title(
-            "🎓 EduAccess AI Dashboard"
-        )
+if page == "Dashboard":
 
-        st.subheader(
-            f"Welcome, {user_name}! 👋"
-        )
+    show_dashboard()
 
-        st.write(
-            "Your personalized accessible "
-            "learning environment."
-        )
 
-        st.divider()
+elif page == "AI Tutor":
 
-        # ----------------------------------------------------
-        # PROFILE CARDS
-        # ----------------------------------------------------
+    show_tutor()
 
-        col1, col2, col3 = st.columns(3)
 
-        with col1:
+elif page == "History":
 
-            st.info(
-                f"""
-### 👤 Student
+    show_history()
 
-**{user_name}**
-"""
-            )
 
-        with col2:
+elif page == "Settings":
 
-            disability_type = (
-                st.session_state.get(
-                    "disability_type",
-                    "Not specified",
-                )
-            )
+    show_settings()
 
-            st.info(
-                f"""
-### ♿ Accessibility
 
-**{disability_type}**
-"""
-            )
+# ============================================================
+# FOOTER
+# ============================================================
 
-        with col3:
+st.divider()
 
-            st.success(
-                """
-### 🤖 AI Tutor
+st.caption(
+    "EduAccess AI • Inclusive Learning Platform"
+)
 
-**Available**
-"""
-            )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # FEATURES
-        # ----------------------------------------------------
-
-        st.subheader(
-            "🚀 EduAccess AI Features"
-        )
-
-        feature1, feature2, feature3 = st.columns(3)
-
-        with feature1:
-
-            st.markdown(
-                """
-### 🤖 AI Tutor
-
-Ask questions and receive
-personalized explanations.
-"""
-            )
-
-        with feature2:
-
-            st.markdown(
-                """
-### 📚 History
-
-View your previous AI Tutor
-questions and answers.
-"""
-            )
-
-        with feature3:
-
-            st.markdown(
-                """
-### ♿ Accessibility
-
-Customize your learning
-experience.
-"""
-            )
-
-        st.divider()
-
-        # ----------------------------------------------------
-        # ACCESSIBILITY SUPPORT
-        # ----------------------------------------------------
-
-        st.subheader(
-            "♿ Your Learning Support"
-        )
-
-        support1, support2, support3 = st.columns(3)
-
-        with support1:
-
-            st.markdown(
-                """
-🔊 **Audio Support**
-
-Text-to-Speech can help
-students who prefer listening.
-"""
-            )
-
-        with support2:
-
-            st.markdown(
-                """
-🧩 **Step-by-Step Learning**
-
-Complex concepts can be
-broken into smaller steps.
-"""
-            )
-
-        with support3:
-
-            st.markdown(
-                """
-🔎 **Readable Content**
-
-Clear formatting and
-accessible content improve readability.
-"""
-            )
-
-        st.divider()
-
-        st.info(
-            """
-💡 Use the sidebar to access:
-
-**🤖 AI Tutor** → Ask educational questions.
-
-**📚 History** → View previous conversations.
-
-**♿ Accessibility** → Customize your learning experience.
-"""
-        )
-
-    # ========================================================
-    # AI TUTOR
-    # ========================================================
-
-    elif page == "🤖 AI Tutor":
-
-        show_tutor()
-
-    # ========================================================
-    # HISTORY
-    # ========================================================
-
-    elif page == "📚 History":
-
-        show_history()
-
-    # ========================================================
-    # ACCESSIBILITY
-    # ========================================================
-
-    elif page == "♿ Accessibility":
-
-        show_accessibility()
+st.caption(
+    "Personalized • Accessible • AI-Powered"
+)

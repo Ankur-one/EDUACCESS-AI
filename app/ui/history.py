@@ -1,480 +1,405 @@
-import importlib
+import streamlit as st  # type: ignore[import-not-found]
 
-# Load Streamlit dynamically so static analyzers do not require the optional
-# UI dependency to be installed in the current Python environment.
-from app.auth.session import get_current_user
+from app.auth.session import get_current_user_id
 from app.database.database import SessionLocal
 from app.database.tutor_crud import (
     get_user_conversations,
-    delete_all_tutor_conversations,
     delete_tutor_conversation,
+    delete_all_tutor_conversations,
 )
-
-st = importlib.import_module("streamlit")
 
 
 # ============================================================
-# SHOW HISTORY PAGE
+# HISTORY PAGE
 # ============================================================
 
 def show_history():
 
-    # ========================================================
-    # CURRENT USER
-    # ========================================================
+    st.title("📚 Tutor History")
 
-    user = get_current_user()
-
-    if user is None:
-
-        st.warning(
-            "⚠️ User session not found. "
-            "Please login again."
-        )
-
-        return
-
-    # ========================================================
-    # USER ID
-    # ========================================================
-
-    user_id = getattr(
-        user,
-        "id",
-        None,
-    )
-
-    if user_id is None:
-
-        st.error(
-            "❌ User ID not found."
-        )
-
-        return
-
-    # ========================================================
-    # HEADER
-    # ========================================================
-
-    st.title(
-        "📚 AI Tutor History"
-    )
-
-    st.write(
-        "Search, review, and manage your "
-        "previous AI Tutor conversations."
+    st.caption(
+        "View your previous EduAccess AI Tutor conversations."
     )
 
     st.divider()
 
     # ========================================================
-    # LOAD CONVERSATIONS
+    # GET CURRENT USER
+    # ========================================================
+
+    user_id = get_current_user_id()
+
+    if not user_id:
+
+        st.warning(
+            "⚠️ User session not found. Please login again."
+        )
+
+        return
+
+    # ========================================================
+    # DATABASE
     # ========================================================
 
     db = SessionLocal()
 
     try:
 
+        # ====================================================
+        # LOAD CONVERSATIONS
+        # ====================================================
+
         conversations = get_user_conversations(
             db=db,
             user_id=user_id,
-            limit=500,
+            limit=100,
         )
-
-    except Exception as e:
-
-        st.error(
-            f"❌ Could not load history: {e}"
-        )
-
-        return
-
-    finally:
-
-        db.close()
-
-    # ========================================================
-    # NO HISTORY
-    # ========================================================
-
-    if not conversations:
-
-        st.info(
-            "💬 No AI Tutor conversations found."
-        )
-
-        st.write(
-            "Go to **🤖 AI Tutor** and ask "
-            "your first question."
-        )
-
-        return
-
-    # ========================================================
-    # SUMMARY
-    # ========================================================
-
-    st.success(
-        f"📖 Total conversations: "
-        f"**{len(conversations)}**"
-    )
-
-    st.divider()
-
-    # ========================================================
-    # SEARCH
-    # ========================================================
-
-    st.subheader(
-        "🔎 Search Conversations"
-    )
-
-    search_text = st.text_input(
-        "Search by question or answer:",
-        placeholder=(
-            "Example: Python, machine learning, CNN..."
-        ),
-        key="history_search",
-    )
-
-    # ========================================================
-    # FILTER
-    # ========================================================
-
-    st.subheader(
-        "📅 Filter"
-    )
-
-    filter_option = st.selectbox(
-        "Show:",
-        [
-            "All conversations",
-            "Last 7 conversations",
-            "Last 30 conversations",
-        ],
-        key="history_filter",
-    )
-
-    # ========================================================
-    # APPLY FILTER
-    # ========================================================
-
-    filtered_conversations = list(
-        conversations
-    )
-
-    if filter_option == "Last 7 conversations":
-
-        filtered_conversations = (
-            filtered_conversations[-7:]
-        )
-
-    elif filter_option == "Last 30 conversations":
-
-        filtered_conversations = (
-            filtered_conversations[-30:]
-        )
-
-    # ========================================================
-    # APPLY SEARCH
-    # ========================================================
-
-    if search_text:
-
-        search_text = (
-            search_text.strip().lower()
-        )
-
-        if search_text:
-
-            results = []
-
-            for conversation in (
-                filtered_conversations
-            ):
-
-                question = getattr(
-                    conversation,
-                    "question",
-                    "",
-                )
-
-                answer = getattr(
-                    conversation,
-                    "answer",
-                    "",
-                )
-
-                if not isinstance(
-                    question,
-                    str,
-                ):
-
-                    question = str(
-                        question
-                    )
-
-                if not isinstance(
-                    answer,
-                    str,
-                ):
-
-                    answer = str(
-                        answer
-                    )
-
-                searchable_text = (
-                    question
-                    + " "
-                    + answer
-                ).lower()
-
-                if search_text in searchable_text:
-
-                    results.append(
-                        conversation
-                    )
-
-            filtered_conversations = results
-
-    # ========================================================
-    # RESULT COUNT
-    # ========================================================
-
-    st.caption(
-        f"Showing "
-        f"{len(filtered_conversations)} "
-        f"conversation(s)"
-    )
-
-    st.divider()
-
-    # ========================================================
-    # NO RESULTS
-    # ========================================================
-
-    if not filtered_conversations:
-
-        st.warning(
-            "🔎 No conversations matched your search."
-        )
-
-        return
-
-    # ========================================================
-    # DISPLAY CONVERSATIONS
-    # ========================================================
-
-    for number, conversation in enumerate(
-        reversed(filtered_conversations),
-        start=1,
-    ):
-
-        conversation_id = getattr(
-            conversation,
-            "id",
-            None,
-        )
-
-        question = getattr(
-            conversation,
-            "question",
-            "",
-        )
-
-        answer = getattr(
-            conversation,
-            "answer",
-            "",
-        )
-
-        created_at = getattr(
-            conversation,
-            "created_at",
-            None,
-        )
-
-        # ----------------------------------------------------
-        # NORMALIZE
-        # ----------------------------------------------------
-
-        if not isinstance(
-            question,
-            str,
-        ):
-
-            question = str(
-                question
-            )
-
-        if not isinstance(
-            answer,
-            str,
-        ):
-
-            answer = str(
-                answer
-            )
-
-        question = question.strip()
-        answer = answer.strip()
-
-        # ----------------------------------------------------
-        # DATE
-        # ----------------------------------------------------
-
-        if created_at:
-
-            try:
-
-                date_text = created_at.strftime(
-                    "%d %B %Y, %I:%M %p"
-                )
-
-            except Exception:
-
-                date_text = str(
-                    created_at
-                )
-
-        else:
-
-            date_text = "Unknown date"
 
         # ====================================================
-        # CONVERSATION
+        # EMPTY HISTORY
         # ====================================================
 
-        with st.expander(
-            f"💬 Question {number} — {date_text}"
-        ):
-
-            st.markdown(
-                "### 👤 Your Question"
-            )
+        if not conversations:
 
             st.info(
-                question
+                "📭 No tutor history available."
             )
 
-            st.markdown(
-                "### 🤖 EduAccess AI Answer"
+            st.write(
+                "Go to **AI Tutor** and ask your first "
+                "question."
             )
 
-            st.markdown(
-                answer
-            )
+            return
 
-            st.caption(
-                f"Conversation ID: "
-                f"{conversation_id}"
-            )
+        # ====================================================
+        # TOP STATISTICS
+        # ====================================================
 
-            st.divider()
-
-            # ------------------------------------------------
-            # DELETE INDIVIDUAL CONVERSATION
-            # ------------------------------------------------
-
-            delete_key = (
-                f"delete_conversation_"
-                f"{conversation_id}"
-            )
-
-            if st.button(
-                "🗑️ Delete This Conversation",
-                key=delete_key,
-                use_container_width=True,
-            ):
-
-                db = SessionLocal()
-
-                try:
-
-                    deleted = (
-                        delete_tutor_conversation(
-                            db=db,
-                            conversation_id=conversation_id,
-                            user_id=user_id,
-                        )
-                    )
-
-                    if deleted:
-
-                        st.success(
-                            "✅ Conversation deleted."
-                        )
-
-                    else:
-
-                        st.warning(
-                            "⚠️ Conversation was not found."
-                        )
-
-                except Exception as e:
-
-                    st.error(
-                        f"❌ Delete failed: {e}"
-                    )
-
-                finally:
-
-                    db.close()
-
-                st.rerun()
-
-        st.divider()
-
-    # ========================================================
-    # DELETE ALL
-    # ========================================================
-
-    st.subheader(
-        "🗑️ History Management"
-    )
-
-    if "confirm_delete_history" not in st.session_state:
-
-        st.session_state[
-            "confirm_delete_history"
-        ] = False
-
-    if not st.session_state[
-        "confirm_delete_history"
-    ]:
-
-        if st.button(
-            "🗑️ Delete All History",
-            use_container_width=True,
-        ):
-
-            st.session_state[
-                "confirm_delete_history"
-            ] = True
-
-            st.rerun()
-
-    else:
-
-        st.warning(
-            "⚠️ This permanently deletes "
-            "all your AI Tutor conversations."
-        )
-
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
 
         with col1:
 
-            if st.button(
-                "✅ Yes, Delete Everything",
-                use_container_width=True,
-            ):
+            st.metric(
+                "💬 Questions",
+                len(conversations),
+            )
 
-                db = SessionLocal()
+        with col2:
 
-                try:
+            # Count unique dates
+            dates = set()
 
-                    deleted = (
+            for conversation in conversations:
+
+                created_at = getattr(
+                    conversation,
+                    "created_at",
+                    None,
+                )
+
+                if created_at:
+
+                    dates.add(
+                        created_at.date()
+                    )
+
+            st.metric(
+                "📅 Active Days",
+                len(dates),
+            )
+
+        with col3:
+
+            st.metric(
+                "🤖 AI Answers",
+                len(conversations),
+            )
+
+        st.divider()
+
+        # ====================================================
+        # SEARCH
+        # ====================================================
+
+        search_text = st.text_input(
+            "🔎 Search your tutor history",
+            placeholder=(
+                "Search by question or answer..."
+            ),
+            key="history_search",
+        )
+
+        # ====================================================
+        # FILTER
+        # ========================================================
+
+        if search_text.strip():
+
+            search_value = (
+                search_text
+                .strip()
+                .lower()
+            )
+
+            filtered = []
+
+            for conversation in conversations:
+
+                question = (
+                    conversation.question
+                    or ""
+                ).lower()
+
+                answer = (
+                    conversation.answer
+                    or ""
+                ).lower()
+
+                if (
+                    search_value in question
+                    or search_value in answer
+                ):
+
+                    filtered.append(
+                        conversation
+                    )
+
+        else:
+
+            filtered = conversations
+
+        # ====================================================
+        # RESULT INFORMATION
+        # ====================================================
+
+        st.caption(
+            f"Showing {len(filtered)} "
+            f"of {len(conversations)} conversations"
+        )
+
+        st.divider()
+
+        # ====================================================
+        # GROUP BY DATE
+        # ====================================================
+
+        grouped = {}
+
+        for conversation in filtered:
+
+            created_at = getattr(
+                conversation,
+                "created_at",
+                None,
+            )
+
+            if created_at:
+
+                date_key = created_at.date()
+
+            else:
+
+                date_key = "Unknown Date"
+
+            if date_key not in grouped:
+
+                grouped[date_key] = []
+
+            grouped[date_key].append(
+                conversation
+            )
+
+        # ====================================================
+        # DISPLAY GROUPS
+        # ====================================================
+
+        for date_key, items in grouped.items():
+
+            # ------------------------------------------------
+            # DATE HEADING
+            # ------------------------------------------------
+
+            if date_key != "Unknown Date":
+
+                date_title = date_key.strftime(
+                    "%A, %d %B %Y"
+                )
+
+            else:
+
+                date_title = "Unknown Date"
+
+            st.subheader(
+                f"📅 {date_title}"
+            )
+
+            # ------------------------------------------------
+            # CONVERSATIONS
+            # ------------------------------------------------
+
+            for conversation in items:
+
+                question = (
+                    conversation.question
+                    or "Untitled Question"
+                )
+
+                created_at = getattr(
+                    conversation,
+                    "created_at",
+                    None,
+                )
+
+                if created_at:
+
+                    time_text = created_at.strftime(
+                        "%I:%M %p"
+                    )
+
+                else:
+
+                    time_text = "Time unavailable"
+
+                # ------------------------------------------------
+                # EXPANDER
+                # ------------------------------------------------
+
+                with st.expander(
+                    f"💬 {question[:90]} "
+                    f"  •  🕒 {time_text}"
+                ):
+
+                    # ============================================
+                    # QUESTION
+                    # ============================================
+
+                    st.markdown(
+                        "### 👤 Your Question"
+                    )
+
+                    st.info(
+                        question
+                    )
+
+                    # ============================================
+                    # ANSWER
+                    # ============================================
+
+                    st.markdown(
+                        "### 🤖 EduAccess AI Answer"
+                    )
+
+                    answer = (
+                        conversation.answer
+                        or "No answer available."
+                    )
+
+                    st.markdown(
+                        answer
+                    )
+
+                    st.divider()
+
+                    # ============================================
+                    # CONVERSATION ID
+                    # ============================================
+
+                    st.caption(
+                        f"Conversation ID: "
+                        f"{conversation.id}"
+                    )
+
+                    # ============================================
+                    # DELETE
+                    # ============================================
+
+                    delete_key = (
+                        f"delete_history_"
+                        f"{conversation.id}"
+                    )
+
+                    if st.button(
+                        "🗑️ Delete Conversation",
+                        key=delete_key,
+                        use_container_width=True,
+                    ):
+
+                        deleted = (
+                            delete_tutor_conversation(
+                                db=db,
+                                conversation_id=(
+                                    conversation.id
+                                ),
+                                user_id=user_id,
+                            )
+                        )
+
+                        if deleted:
+
+                            st.success(
+                                "✅ Conversation deleted."
+                            )
+
+                            st.rerun()
+
+                        else:
+
+                            st.error(
+                                "❌ Conversation could "
+                                "not be deleted."
+                            )
+
+            st.divider()
+
+        # ====================================================
+        # DELETE ALL
+        # ====================================================
+
+        st.subheader(
+            "⚠️ History Management"
+        )
+
+        st.write(
+            "Deleting history permanently removes "
+            "your saved tutor conversations."
+        )
+
+        if st.button(
+            "🗑️ Delete All Tutor History",
+            use_container_width=True,
+            key="delete_all_history_button",
+        ):
+
+            st.session_state[
+                "confirm_delete_all_history"
+            ] = True
+
+        # ====================================================
+        # CONFIRMATION
+        # ====================================================
+
+        if st.session_state.get(
+            "confirm_delete_all_history",
+            False,
+        ):
+
+            st.warning(
+                "⚠️ Are you sure you want to delete "
+                "ALL tutor conversations?"
+            )
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                if st.button(
+                    "✅ Yes, Delete All",
+                    use_container_width=True,
+                    key="yes_delete_all_history",
+                ):
+
+                    count = (
                         delete_all_tutor_conversations(
                             db=db,
                             user_id=user_id,
@@ -482,46 +407,46 @@ def show_history():
                     )
 
                     st.session_state[
-                        "confirm_delete_history"
+                        "confirm_delete_all_history"
                     ] = False
 
                     st.success(
-                        f"✅ Deleted {deleted} "
-                        "conversation(s)."
+                        f"✅ Successfully deleted "
+                        f"{count} conversation(s)."
                     )
 
                     st.rerun()
 
-                except Exception as e:
+            with col2:
 
-                    st.error(
-                        f"❌ Delete failed: {e}"
-                    )
+                if st.button(
+                    "❌ Cancel",
+                    use_container_width=True,
+                    key="cancel_delete_all_history",
+                ):
 
-                finally:
+                    st.session_state[
+                        "confirm_delete_all_history"
+                    ] = False
 
-                    db.close()
-
-        with col2:
-
-            if st.button(
-                "❌ Cancel",
-                use_container_width=True,
-            ):
-
-                st.session_state[
-                    "confirm_delete_history"
-                ] = False
-
-                st.rerun()
+                    st.rerun()
 
     # ========================================================
-    # SECURITY NOTE
+    # ERROR HANDLING
     # ========================================================
 
-    st.divider()
+    except Exception as error:
 
-    st.caption(
-        "🔒 Your history is restricted to "
-        "the currently logged-in account."
-    )
+        st.error(
+            "❌ Unable to load tutor history."
+        )
+
+        st.exception(error)
+
+    # ========================================================
+    # CLOSE DATABASE
+    # ========================================================
+
+    finally:
+
+        db.close()

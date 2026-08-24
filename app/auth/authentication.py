@@ -1,6 +1,10 @@
 from typing import Any
 
-from app.auth.password import hash_password, verify_password
+from app.auth.password import (
+    hash_password,
+    verify_password,
+)
+
 from app.database.database import SessionLocal
 from app.database.models import User
 
@@ -16,29 +20,101 @@ def register_user(
     disability_type: str = "No disability",
     disability_details: str = "",
     preferred_language: str = "English",
-    simple_explanation: bool = False,
-    step_by_step: bool = False,
+
+    # --------------------------------------------------------
+    # LEARNING PREFERENCES
+    # --------------------------------------------------------
+
+    simple_explanation: bool = True,
+    step_by_step: bool = True,
     repetition_support: bool = False,
-    visual_explanation: bool = False,
+    visual_explanation: bool = True,
+
+    # --------------------------------------------------------
+    # COMMUNICATION ACCESSIBILITY
+    # --------------------------------------------------------
+
     text_to_speech: bool = False,
     speech_to_text: bool = False,
+
+    # --------------------------------------------------------
+    # VISUAL ACCESSIBILITY
+    # --------------------------------------------------------
+
     large_text: bool = False,
+    high_contrast: bool = False,
+    dyslexia_friendly: bool = False,
 ):
     """
     Create a new EduAccess AI student account.
+
+    All learning and accessibility preferences are stored
+    permanently in the database.
     """
 
     db: Any = SessionLocal()
 
     try:
 
-        # ----------------------------------------------------
-        # Check existing email
-        # ----------------------------------------------------
+        # ====================================================
+        # CLEAN INPUT
+        # ====================================================
+
+        full_name = str(full_name).strip()
+        email = str(email).strip().lower()
+        password = str(password)
+
+        disability_type = (
+            str(disability_type).strip()
+            or "No disability"
+        )
+
+        disability_details = (
+            str(disability_details).strip()
+        )
+
+        preferred_language = (
+            str(preferred_language).strip()
+            or "English"
+        )
+
+        # ====================================================
+        # VALIDATION
+        # ====================================================
+
+        if not full_name:
+
+            raise ValueError(
+                "Full name is required."
+            )
+
+        if not email:
+
+            raise ValueError(
+                "Email is required."
+            )
+
+        if "@" not in email:
+
+            raise ValueError(
+                "Please enter a valid email address."
+            )
+
+        if len(password) < 6:
+
+            raise ValueError(
+                "Password must contain at least 6 characters."
+            )
+
+        # ====================================================
+        # CHECK EXISTING EMAIL
+        # ====================================================
 
         existing_user = (
             db.query(User)
-            .filter(User.email == email.strip().lower())
+            .filter(
+                User.email == email
+            )
             .first()
         )
 
@@ -48,47 +124,96 @@ def register_user(
                 "An account with this email already exists."
             )
 
-        # ----------------------------------------------------
-        # Hash password
-        # ----------------------------------------------------
+        # ====================================================
+        # HASH PASSWORD
+        # ====================================================
 
-        password_hash = hash_password(password)
+        password_hash = hash_password(
+            password
+        )
 
-        # ----------------------------------------------------
-        # Create user
-        # ----------------------------------------------------
+        # ====================================================
+        # CREATE USER
+        # ====================================================
 
         user = User(
-            full_name=full_name.strip(),
 
-            email=email.strip().lower(),
+            # ------------------------------------------------
+            # BASIC INFORMATION
+            # ------------------------------------------------
+
+            full_name=full_name,
+
+            email=email,
 
             password_hash=password_hash,
+
+            # ------------------------------------------------
+            # DISABILITY INFORMATION
+            # ------------------------------------------------
 
             disability_type=disability_type,
 
             disability_details=disability_details,
 
+            # ------------------------------------------------
+            # LANGUAGE
+            # ------------------------------------------------
+
             preferred_language=preferred_language,
 
-            simple_explanation=simple_explanation,
+            # ------------------------------------------------
+            # LEARNING PREFERENCES
+            # ------------------------------------------------
 
-            step_by_step=step_by_step,
+            simple_explanation=bool(
+                simple_explanation
+            ),
 
-            repetition_support=repetition_support,
+            step_by_step=bool(
+                step_by_step
+            ),
 
-            visual_explanation=visual_explanation,
+            repetition_support=bool(
+                repetition_support
+            ),
 
-            text_to_speech=text_to_speech,
+            visual_explanation=bool(
+                visual_explanation
+            ),
 
-            speech_to_text=speech_to_text,
+            # ------------------------------------------------
+            # COMMUNICATION ACCESSIBILITY
+            # ------------------------------------------------
 
-            large_text=large_text,
+            text_to_speech=bool(
+                text_to_speech
+            ),
+
+            speech_to_text=bool(
+                speech_to_text
+            ),
+
+            # ------------------------------------------------
+            # VISUAL ACCESSIBILITY
+            # ------------------------------------------------
+
+            large_text=bool(
+                large_text
+            ),
+
+            high_contrast=bool(
+                high_contrast
+            ),
+
+            dyslexia_friendly=bool(
+                dyslexia_friendly
+            ),
         )
 
-        # ----------------------------------------------------
-        # Save
-        # ----------------------------------------------------
+        # ====================================================
+        # SAVE
+        # ====================================================
 
         db.add(user)
 
@@ -118,36 +243,38 @@ def login_user(
     password: str,
 ):
     """
-    Authenticate a student.
+    Authenticate a student using email and password.
     """
 
     db: Any = SessionLocal()
 
     try:
 
+        email = str(email).strip().lower()
+
         user = (
             db.query(User)
             .filter(
-                User.email == email.strip().lower()
+                User.email == email
             )
             .first()
         )
 
         # ----------------------------------------------------
-        # User doesn't exist
+        # USER NOT FOUND
         # ----------------------------------------------------
 
-        if not user:
+        if user is None:
 
             return None
 
         # ----------------------------------------------------
-        # Verify password
+        # VERIFY PASSWORD
         # ----------------------------------------------------
 
         if not verify_password(
             password,
-            user.password_hash
+            user.password_hash,
         ):
 
             return None
@@ -164,10 +291,10 @@ def login_user(
 # ============================================================
 
 def get_user_by_id(
-    user_id: int
+    user_id: int,
 ):
     """
-    Get a student by database ID.
+    Return a user by database ID.
     """
 
     db: Any = SessionLocal()
@@ -176,7 +303,9 @@ def get_user_by_id(
 
         return (
             db.query(User)
-            .filter(User.id == user_id)
+            .filter(
+                User.id == user_id
+            )
             .first()
         )
 
@@ -190,20 +319,22 @@ def get_user_by_id(
 # ============================================================
 
 def get_user_by_email(
-    email: str
+    email: str,
 ):
     """
-    Get a student by email.
+    Return a user by email.
     """
 
     db: Any = SessionLocal()
 
     try:
 
+        email = str(email).strip().lower()
+
         return (
             db.query(User)
             .filter(
-                User.email == email.strip().lower()
+                User.email == email
             )
             .first()
         )

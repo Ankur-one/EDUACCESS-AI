@@ -12,22 +12,40 @@ def save_tutor_conversation(
     user_id: int,
     question: str,
     answer: str,
+    session_id: Optional[str] = None,
 ) -> TutorConversation:
     """
     Save one student question and AI answer.
+
+    session_id identifies the tutor conversation session.
     """
 
     question = str(question).strip()
     answer = str(answer).strip()
 
+    if not question:
+
+        raise ValueError(
+            "Question cannot be empty."
+        )
+
+    if not answer:
+
+        raise ValueError(
+            "Answer cannot be empty."
+        )
+
     conversation = TutorConversation(
         user_id=user_id,
+        session_id=session_id,
         question=question,
         answer=answer,
     )
 
     db.add(conversation)
+
     db.commit()
+
     db.refresh(conversation)
 
     return conversation
@@ -57,6 +75,40 @@ def get_user_conversations(
     )
 
     if limit is not None:
+
+        query = query.limit(limit)
+
+    return query.all()
+
+
+# ============================================================
+# GET SESSION CONVERSATIONS
+# ============================================================
+
+def get_session_conversations(
+    db: Any,
+    user_id: int,
+    session_id: str,
+    limit: Optional[int] = 100,
+):
+    """
+    Get conversations belonging to one user and
+    one tutor session.
+    """
+
+    query = (
+        db.query(TutorConversation)
+        .filter(
+            TutorConversation.user_id == user_id,
+            TutorConversation.session_id == session_id,
+        )
+        .order_by(
+            TutorConversation.created_at.asc()
+        )
+    )
+
+    if limit is not None:
+
         query = query.limit(limit)
 
     return query.all()
@@ -99,6 +151,7 @@ def get_tutor_conversation(
 ):
     """
     Get one conversation.
+
     The user_id check prevents one user from
     accessing another user's conversation.
     """
@@ -133,9 +186,11 @@ def delete_tutor_conversation(
     )
 
     if conversation is None:
+
         return False
 
     db.delete(conversation)
+
     db.commit()
 
     return True
@@ -173,3 +228,4 @@ def delete_all_tutor_conversations(
     db.commit()
 
     return count
+
