@@ -1,6 +1,6 @@
 import uuid
 
-import streamlit as st  # pyright: ignore[reportMissingImports]
+import streamlit as st  # type: ignore[import-not-found]
 
 from app.auth.session import get_current_user_id
 from app.database.database import SessionLocal
@@ -17,27 +17,19 @@ from app.ai.tutor_engine import ask_tutor
 # ============================================================
 
 def initialize_tutor_state():
+    """
+    Initialize all Tutor-related Streamlit session variables.
+    """
 
     if "tutor_session_id" not in st.session_state:
-
         st.session_state.tutor_session_id = str(
             uuid.uuid4()
         )
 
     if "tutor_answer" not in st.session_state:
-
         st.session_state.tutor_answer = ""
 
-    if "tutor_input_value" not in st.session_state:
-
-        st.session_state.tutor_input_value = ""
-
-    if "tutor_clear_input" not in st.session_state:
-
-        st.session_state.tutor_clear_input = False
-
     if "continue_tutor_session" not in st.session_state:
-
         st.session_state.continue_tutor_session = False
 
 
@@ -46,6 +38,9 @@ def initialize_tutor_state():
 # ============================================================
 
 def create_new_tutor_session():
+    """
+    Start a completely new AI Tutor session.
+    """
 
     st.session_state.tutor_session_id = str(
         uuid.uuid4()
@@ -53,11 +48,158 @@ def create_new_tutor_session():
 
     st.session_state.tutor_answer = ""
 
-    st.session_state.tutor_input_value = ""
-
-    st.session_state.tutor_clear_input = True
-
     st.session_state.continue_tutor_session = False
+
+
+# ============================================================
+# LOAD CURRENT USER
+# ============================================================
+
+def get_current_user(db, user_id):
+    """
+    Load the currently logged-in user from the database.
+    """
+
+    return (
+        db.query(User)
+        .filter(
+            User.id == user_id
+        )
+        .first()
+    )
+
+
+# ============================================================
+# SHOW ACCESSIBILITY INFORMATION
+# ============================================================
+
+def show_accessibility_information(user):
+    """
+    Display the student's saved accessibility preferences.
+    """
+
+    st.subheader(
+        "♿ Accessibility & Learning Preferences"
+    )
+
+    st.write(
+        "🌐 Language: "
+        f"**{user.preferred_language or 'English'}**"
+    )
+
+    preferences = []
+
+    if user.simple_explanation:
+        preferences.append(
+            "✓ Simple explanations"
+        )
+
+    if user.step_by_step:
+        preferences.append(
+            "✓ Step-by-step learning"
+        )
+
+    if user.repetition_support:
+        preferences.append(
+            "✓ Repetition support"
+        )
+
+    if user.visual_explanation:
+        preferences.append(
+            "✓ Visual explanations"
+        )
+
+    if user.text_to_speech:
+        preferences.append(
+            "✓ Text-to-speech"
+        )
+
+    if user.speech_to_text:
+        preferences.append(
+            "✓ Speech-to-text"
+        )
+
+    if user.large_text:
+        preferences.append(
+            "✓ Large text"
+        )
+
+    if user.high_contrast:
+        preferences.append(
+            "✓ High contrast"
+        )
+
+    if user.dyslexia_friendly:
+        preferences.append(
+            "✓ Dyslexia friendly"
+        )
+
+    if preferences:
+
+        for preference in preferences:
+            st.write(preference)
+
+    else:
+
+        st.caption(
+            "No additional accessibility preferences "
+            "are currently enabled."
+        )
+
+
+# ============================================================
+# DISPLAY CONVERSATION
+# ============================================================
+
+def show_conversation(conversations):
+    """
+    Display the current Tutor session conversation.
+    """
+
+    st.subheader(
+        "💬 Current Conversation"
+    )
+
+    if not conversations:
+
+        st.info(
+            "👋 This is a new Tutor session. "
+            "Ask your first question below."
+        )
+
+        return
+
+    for conversation in conversations:
+
+        question = str(
+            getattr(
+                conversation,
+                "question",
+                "",
+            )
+            or ""
+        ).strip()
+
+        answer = str(
+            getattr(
+                conversation,
+                "answer",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if question:
+
+            with st.chat_message("user"):
+
+                st.markdown(question)
+
+        if answer:
+
+            with st.chat_message("assistant"):
+
+                st.markdown(answer)
 
 
 # ============================================================
@@ -65,9 +207,12 @@ def create_new_tutor_session():
 # ============================================================
 
 def show_tutor():
+    """
+    Main AI Tutor interface.
+    """
 
     # ========================================================
-    # INITIALIZE SESSION STATE
+    # INITIALIZE STATE
     # ========================================================
 
     initialize_tutor_state()
@@ -76,7 +221,9 @@ def show_tutor():
     # PAGE HEADER
     # ========================================================
 
-    st.title("🤖 EduAccess AI Tutor")
+    st.title(
+        "🤖 EduAccess AI Tutor"
+    )
 
     st.caption(
         "Ask questions using text or voice and receive "
@@ -86,12 +233,12 @@ def show_tutor():
     st.divider()
 
     # ========================================================
-    # GET CURRENT USER
+    # CURRENT USER ID
     # ========================================================
 
     user_id = get_current_user_id()
 
-    if not user_id:
+    if user_id is None:
 
         st.warning(
             "⚠️ User session not found. "
@@ -99,6 +246,14 @@ def show_tutor():
         )
 
         return
+
+    # ========================================================
+    # CURRENT SESSION ID
+    # ========================================================
+
+    session_id = (
+        st.session_state.tutor_session_id
+    )
 
     # ========================================================
     # DATABASE
@@ -109,15 +264,12 @@ def show_tutor():
     try:
 
         # ====================================================
-        # GET USER
+        # LOAD USER
         # ====================================================
 
-        user = (
-            db.query(User)
-            .filter(
-                User.id == user_id
-            )
-            .first()
+        user = get_current_user(
+            db=db,
+            user_id=user_id,
         )
 
         if user is None:
@@ -129,144 +281,62 @@ def show_tutor():
             return
 
         # ====================================================
-        # CURRENT SESSION ID
+        # SESSION CONTROLS
         # ====================================================
 
-        session_id = (
-            st.session_state.tutor_session_id
-        )
+        col1, col2 = st.columns(2)
 
-        # ====================================================
-        # SIDEBAR
-        # ====================================================
+        with col1:
 
-        with st.sidebar:
-
-            st.subheader(
-                "🤖 AI Tutor"
-            )
-
-            st.write(
-                f"👤 **{user.full_name}**"
-            )
-
-            st.divider()
-
-            # ------------------------------------------------
-            # NEW SESSION
-            # ------------------------------------------------
-
-            if st.button(
-                "➕ New Tutor Session",
+            new_session_button = st.button(
+                "🆕 New Tutor Session",
                 use_container_width=True,
                 key="new_tutor_session_button",
-            ):
-
-                create_new_tutor_session()
-
-                st.rerun()
-
-            # ------------------------------------------------
-            # SESSION INFORMATION
-            # ------------------------------------------------
-
-            st.caption(
-                "Current Session"
             )
 
-            st.code(
-                session_id,
-                language=None,
+        with col2:
+
+            continue_session_button = st.button(
+                "↩️ Continue Current Session",
+                use_container_width=True,
+                key="continue_tutor_session_button",
             )
-
-            # ------------------------------------------------
-            # CONTINUE SESSION MESSAGE
-            # ------------------------------------------------
-
-            if st.session_state.get(
-                "continue_tutor_session",
-                False,
-            ):
-
-                st.success(
-                    "▶️ Continuing this tutor session."
-                )
-
-                st.session_state.continue_tutor_session = (
-                    False
-                )
-
-            st.divider()
-
-            # ------------------------------------------------
-            # ACCESSIBILITY
-            # ------------------------------------------------
-
-            st.subheader(
-                "♿ Accessibility"
-            )
-
-            st.write(
-                "Language: "
-                f"**{user.preferred_language or 'English'}**"
-            )
-
-            if user.simple_explanation:
-
-                st.write(
-                    "✓ Simple explanations"
-                )
-
-            if user.step_by_step:
-
-                st.write(
-                    "✓ Step-by-step learning"
-                )
-
-            if user.repetition_support:
-
-                st.write(
-                    "✓ Repetition support"
-                )
-
-            if user.visual_explanation:
-
-                st.write(
-                    "✓ Visual explanations"
-                )
-
-            if user.text_to_speech:
-
-                st.write(
-                    "✓ Text-to-speech"
-                )
-
-            if user.speech_to_text:
-
-                st.write(
-                    "✓ Speech-to-text"
-                )
-
-            if user.large_text:
-
-                st.write(
-                    "✓ Large text"
-                )
-
-            if user.high_contrast:
-
-                st.write(
-                    "✓ High contrast"
-                )
-
-            if user.dyslexia_friendly:
-
-                st.write(
-                    "✓ Dyslexia friendly"
-                )
 
         # ====================================================
-        # LOAD CURRENT SESSION CONVERSATION
+        # NEW SESSION
+        # ====================================================
+
+        if new_session_button:
+
+            create_new_tutor_session()
+
+            st.rerun()
+
+        # ====================================================
+        # CONTINUE SESSION
+        # ========================================================
+
+        if continue_session_button:
+
+            st.session_state.continue_tutor_session = True
+
+        # ====================================================
+        # ACCESSIBILITY
+        # ====================================================
+
+        with st.expander(
+            "♿ Accessibility Settings",
+            expanded=False,
+        ):
+
+            show_accessibility_information(
+                user
+            )
+
+        st.divider()
+
+        # ====================================================
+        # LOAD CONVERSATIONS
         # ====================================================
 
         conversations = get_session_conversations(
@@ -277,47 +347,12 @@ def show_tutor():
         )
 
         # ====================================================
-        # CURRENT CONVERSATION
+        # SHOW CONVERSATION
         # ====================================================
 
-        st.subheader(
-            "💬 Current Conversation"
+        show_conversation(
+            conversations
         )
-
-        if conversations:
-
-            for conversation in conversations:
-
-                # --------------------------------------------
-                # STUDENT MESSAGE
-                # --------------------------------------------
-
-                with st.chat_message(
-                    "user"
-                ):
-
-                    st.markdown(
-                        conversation.question
-                    )
-
-                # --------------------------------------------
-                # AI MESSAGE
-                # --------------------------------------------
-
-                with st.chat_message(
-                    "assistant"
-                ):
-
-                    st.markdown(
-                        conversation.answer
-                    )
-
-        else:
-
-            st.info(
-                "👋 This is a new tutor session. "
-                "Ask your first question below."
-            )
 
         st.divider()
 
@@ -326,103 +361,58 @@ def show_tutor():
         # ====================================================
 
         st.subheader(
-            "📝 Ask your question"
+            "❓ Ask the AI Tutor"
+        )
+
+        st.caption(
+            "Type your question below."
         )
 
         # ====================================================
-        # SAFE INPUT CLEAR
+        # QUESTION FORM
         #
-        # IMPORTANT:
-        # We NEVER directly modify
-        # st.session_state.tutor_question
-        # after the widget is instantiated.
-        # ========================================================
-
-        if st.session_state.tutor_clear_input:
-
-            st.session_state.tutor_input_value = ""
-
-            st.session_state.tutor_clear_input = False
-
-        # ====================================================
-        # TEXT INPUT
+        # Using a form prevents us from modifying the
+        # widget's session state after it has been created.
         # ====================================================
 
-        question = st.text_area(
-            "Enter your question:",
-            value=st.session_state.tutor_input_value,
-            height=120,
-            placeholder=(
-                "Example: Explain machine learning "
-                "in simple language."
-            ),
-            key="tutor_question",
-        )
+        with st.form(
+            key="tutor_question_form",
+            clear_on_submit=True,
+        ):
 
-        # ====================================================
-        # STORE CURRENT INPUT
-        # ====================================================
+            question = st.text_area(
+                "Your question",
+                placeholder=(
+                    "Example: Explain inheritance in Java "
+                    "with a simple example."
+                ),
+                height=150,
+                key="tutor_question",
+            )
 
-        st.session_state.tutor_input_value = question
-
-        # ====================================================
-        # BUTTONS
-        # ====================================================
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            ask_button = st.button(
+            ask_button = st.form_submit_button(
                 "🤖 Ask AI Tutor",
                 use_container_width=True,
-                type="primary",
-                key="ask_tutor_button",
-            )
-
-        with col2:
-
-            clear_button = st.button(
-                "🗑️ Clear",
-                use_container_width=True,
-                key="clear_tutor_button",
             )
 
         # ====================================================
-        # CLEAR INPUT
-        # ====================================================
-
-        if clear_button:
-
-            st.session_state.tutor_input_value = ""
-
-            st.session_state.tutor_clear_input = True
-
-            st.rerun()
-
-        # ====================================================
-        # ASK AI
+        # PROCESS QUESTION
         # ====================================================
 
         if ask_button:
 
-            # ------------------------------------------------
-            # VALIDATE QUESTION
-            # ------------------------------------------------
-
-            if not isinstance(
-                question,
-                str,
-            ):
-
-                st.error(
-                    "❌ Invalid question. "
-                    "Please enter a text question."
+            clean_question = (
+                question.strip()
+                if isinstance(
+                    question,
+                    str,
                 )
+                else ""
+            )
 
-                return
-
-            clean_question = question.strip()
+            # ------------------------------------------------
+            # VALIDATION
+            # ------------------------------------------------
 
             if not clean_question:
 
@@ -433,10 +423,7 @@ def show_tutor():
                 return
 
             # ------------------------------------------------
-            # RELOAD SESSION HISTORY
-            #
-            # This ensures the newest database state is
-            # passed to Gemini.
+            # RELOAD CONVERSATION HISTORY
             # ------------------------------------------------
 
             conversation_history = (
@@ -449,10 +436,7 @@ def show_tutor():
             )
 
             # ------------------------------------------------
-            # GENERATE AI ANSWER
-            #
-            # IMPORTANT:
-            # Previous conversation is passed here.
+            # ASK AI
             # ------------------------------------------------
 
             with st.spinner(
@@ -466,13 +450,13 @@ def show_tutor():
                 )
 
             # ------------------------------------------------
-            # CHECK ANSWER
+            # VALIDATE ANSWER
             # ------------------------------------------------
 
             if not answer:
 
                 st.error(
-                    "❌ AI Tutor did not return an answer."
+                    "❌ The AI Tutor did not return an answer."
                 )
 
                 return
@@ -486,22 +470,18 @@ def show_tutor():
                 save_tutor_conversation(
                     db=db,
                     user_id=user_id,
-                    question=clean_question,
-                    answer=answer,
                     session_id=session_id,
+                    question=clean_question,
+                    answer=str(answer),
                 )
-
-                # The CRUD function already commits.
-                # No second commit is required.
 
             except Exception as save_error:
 
                 db.rollback()
 
                 st.error(
-                    "⚠️ AI generated an answer, "
-                    "but the conversation could not "
-                    "be saved."
+                    "⚠️ The AI answered, but the "
+                    "conversation could not be saved."
                 )
 
                 st.exception(
@@ -514,18 +494,15 @@ def show_tutor():
             # STORE LATEST ANSWER
             # ------------------------------------------------
 
-            st.session_state.tutor_answer = answer
+            st.session_state.tutor_answer = str(
+                answer
+            )
 
             # ------------------------------------------------
-            # CLEAR INPUT SAFELY
-            # ------------------------------------------------
-
-            st.session_state.tutor_input_value = ""
-
-            st.session_state.tutor_clear_input = True
-
-            # ------------------------------------------------
-            # REFRESH
+            # REFRESH PAGE
+            #
+            # clear_on_submit=True already clears the form.
+            # We do NOT modify st.session_state.tutor_question.
             # ------------------------------------------------
 
             st.rerun()
@@ -550,17 +527,15 @@ def show_tutor():
     # ERROR HANDLING
     # ========================================================
 
-    except Exception as e:
+    except Exception as error:
 
         st.error(
             "❌ AI Tutor encountered an error."
         )
 
-        st.exception(e)
-
-    # ========================================================
-    # CLOSE DATABASE
-    # ========================================================
+        st.exception(
+            error
+        )
 
     finally:
 
