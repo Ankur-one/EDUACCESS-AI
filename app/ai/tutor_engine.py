@@ -10,12 +10,7 @@ from app.config.settings import settings
 # ============================================================
 
 # IMPORTANT:
-# Do NOT change this back to gemini-2.0-flash.
-#
-# Gemini 2.0 Flash is no longer available.
-# EduAccess AI uses Gemini 3.6 Flash.
-# ============================================================
-
+# Keep the model used by the current EduAccess AI project.
 GEMINI_MODEL = "gemini-3.6-flash"
 
 
@@ -46,6 +41,119 @@ def get_gemini_client():
 
 
 # ============================================================
+# LANGUAGE MAPPING
+# ============================================================
+
+def get_language_name(
+    preferred_language: Optional[str],
+) -> str:
+    """
+    Normalize the student's preferred language.
+
+    Returns a readable language name that can be
+    passed to the AI prompt.
+    """
+
+    if not preferred_language:
+
+        return "English"
+
+    language = str(
+        preferred_language
+    ).strip()
+
+    if not language:
+
+        return "English"
+
+    language_map = {
+
+        "en": "English",
+
+        "en-in": "English",
+
+        "english": "English",
+
+        "hi": "Hindi",
+
+        "hi-in": "Hindi",
+
+        "hindi": "Hindi",
+
+        "pa": "Punjabi",
+
+        "pa-in": "Punjabi",
+
+        "punjabi": "Punjabi",
+
+        "bn": "Bengali",
+
+        "bn-in": "Bengali",
+
+        "bengali": "Bengali",
+
+        "ta": "Tamil",
+
+        "ta-in": "Tamil",
+
+        "tamil": "Tamil",
+
+        "te": "Telugu",
+
+        "te-in": "Telugu",
+
+        "telugu": "Telugu",
+
+        "mr": "Marathi",
+
+        "mr-in": "Marathi",
+
+        "marathi": "Marathi",
+
+        "gu": "Gujarati",
+
+        "gu-in": "Gujarati",
+
+        "gujarati": "Gujarati",
+
+        "kn": "Kannada",
+
+        "kn-in": "Kannada",
+
+        "kannada": "Kannada",
+
+        "ml": "Malayalam",
+
+        "ml-in": "Malayalam",
+
+        "malayalam": "Malayalam",
+
+        "or": "Odia",
+
+        "or-in": "Odia",
+
+        "odia": "Odia",
+
+        "as": "Assamese",
+
+        "as-in": "Assamese",
+
+        "assamese": "Assamese",
+
+        "ur": "Urdu",
+
+        "ur-in": "Urdu",
+
+        "urdu": "Urdu",
+    }
+
+    return language_map.get(
+        language.lower(),
+        language,
+    )
+
+
+# ============================================================
 # PERSONALIZED LEARNING INSTRUCTIONS
 # ============================================================
 
@@ -64,6 +172,10 @@ def build_learning_instruction(
     the student's accessibility preferences.
     """
 
+    language = get_language_name(
+        preferred_language
+    )
+
     instructions = []
 
     # --------------------------------------------------------
@@ -71,7 +183,24 @@ def build_learning_instruction(
     # --------------------------------------------------------
 
     instructions.append(
-        f"Respond in {preferred_language}."
+        f"Respond in {language}."
+    )
+
+    instructions.append(
+        f"Write the main explanation in {language}."
+    )
+
+    instructions.append(
+        "If technical terms, programming keywords, "
+        "or code are normally written in English, "
+        "keep those terms in English when that improves "
+        "clarity."
+    )
+
+    instructions.append(
+        "Do not translate programming syntax, "
+        "variable names, class names, function names, "
+        "or code keywords unnecessarily."
     )
 
     # --------------------------------------------------------
@@ -294,11 +423,19 @@ def create_tutor_prompt(
     """
 
     # ========================================================
+    # LANGUAGE
+    # ========================================================
+
+    language = get_language_name(
+        preferred_language
+    )
+
+    # ========================================================
     # LEARNING INSTRUCTIONS
     # ========================================================
 
     instructions = build_learning_instruction(
-        preferred_language=preferred_language,
+        preferred_language=language,
         simplified_language=simplified_language,
         step_by_step_learning=step_by_step_learning,
         repetition_support=repetition_support,
@@ -354,14 +491,21 @@ def create_tutor_prompt(
     # STUDY CONTEXT
     # ========================================================
 
-    study_context = (
-        context.strip()
-        if isinstance(
+    if (
+        isinstance(
             context,
             str,
-        ) and context.strip()
-        else "No additional study context provided."
-    )
+        )
+        and context.strip()
+    ):
+
+        study_context = context.strip()
+
+    else:
+
+        study_context = (
+            "No additional study context provided."
+        )
 
     # ========================================================
     # MAIN PROMPT
@@ -376,6 +520,12 @@ and accessibility needs.
 
 Your goal is to make education easier, clearer,
 more accessible, and personalized.
+
+============================================================
+STUDENT PREFERRED LANGUAGE
+============================================================
+
+{language}
 
 ============================================================
 ACCESSIBILITY INFORMATION
@@ -406,6 +556,28 @@ CURRENT STUDENT QUESTION
 ============================================================
 
 {question}
+
+============================================================
+LANGUAGE RULES
+============================================================
+
+1. Answer the current question in {language}.
+
+2. The main explanation must be written in {language}.
+
+3. Keep common technical terms in English when
+   translating them would reduce clarity.
+
+4. For programming questions, keep programming
+   keywords and code syntax unchanged.
+
+5. Do not translate code itself unless the student
+   specifically asks for translated comments or text.
+
+6. If the student asks for a translation,
+   follow the requested translation direction.
+
+7. Do not switch to another language unnecessarily.
 
 ============================================================
 GENERAL TEACHING RULES
@@ -477,7 +649,8 @@ GENERAL TEACHING RULES
 FINAL INSTRUCTION
 ============================================================
 
-Now answer the student's CURRENT question.
+Now answer the student's CURRENT question
+in {language}.
 """
 
     return prompt.strip()
@@ -518,32 +691,16 @@ def ask_ai(
         str,
     ):
 
-        return (
-            "❌ Invalid question. "
-            "Please enter a text question."
+        raise ValueError(
+            "Question must be a string."
         )
 
     question = question.strip()
 
     if not question:
 
-        return (
-            "⚠️ Please enter a question."
-        )
-
-    # ========================================================
-    # CREATE GEMINI CLIENT
-    # ========================================================
-
-    try:
-
-        client = get_gemini_client()
-
-    except Exception as error:
-
-        return (
-            "❌ Gemini configuration error.\n\n"
-            f"{error}"
+        raise ValueError(
+            "Please enter a question."
         )
 
     # ========================================================
@@ -567,7 +724,13 @@ def ask_ai(
     )
 
     # ========================================================
-    # CALL GEMINI
+    # CREATE GEMINI CLIENT
+    # ========================================================
+
+    client = get_gemini_client()
+
+    # ========================================================
+    # SEND REQUEST
     # ========================================================
 
     try:
@@ -577,62 +740,31 @@ def ask_ai(
             contents=prompt,
         )
 
-        # ----------------------------------------------------
-        # RESPONSE TEXT
-        # ----------------------------------------------------
-
-        if response is not None:
-
-            response_text = getattr(
-                response,
-                "text",
-                None,
-            )
-
-            if response_text:
-
-                return response_text.strip()
-
-        return (
-            "⚠️ Sorry, I could not generate an answer. "
-            "Please try again."
-        )
-
-    # ========================================================
-    # GEMINI ERROR
-    # ========================================================
-
     except Exception as error:
 
-        error_text = str(error)
+        raise RuntimeError(
+            "The AI Tutor could not contact Gemini."
+        ) from error
 
-        # ----------------------------------------------------
-        # MODEL ERROR
-        # ----------------------------------------------------
+    # ========================================================
+    # GET RESPONSE TEXT
+    # ========================================================
 
-        if (
-            "404" in error_text
-            or "NOT_FOUND" in error_text
-            or "not found" in error_text.lower()
-        ):
+    answer = getattr(
+        response,
+        "text",
+        None,
+    )
 
-            return (
-                "❌ Gemini model error.\n\n"
-                f"EduAccess AI tried to use:\n"
-                f"`{GEMINI_MODEL}`\n\n"
-                "Please verify that your installed "
-                "Google GenAI SDK supports this model.\n\n"
-                f"Technical details:\n{error_text}"
-            )
+    if not answer:
 
-        # ----------------------------------------------------
-        # GENERAL ERROR
-        # ----------------------------------------------------
-
-        return (
-            "❌ AI Tutor error:\n\n"
-            f"{error_text}"
+        raise RuntimeError(
+            "The AI Tutor received an empty response."
         )
+
+    return str(
+        answer
+    ).strip()
 
 
 # ============================================================
@@ -645,43 +777,17 @@ def ask_tutor(
     conversation_history: Optional[
         List[Dict[str, Any]]
     ] = None,
+    context: Optional[str] = None,
 ) -> str:
     """
-    Main function used by the Streamlit AI Tutor.
+    Main interface used by tutor.py.
 
-    Supports:
-
-    - Text questions
-    - Voice-transcribed questions
-    - Personalized learning
-    - Accessibility preferences
-    - Conversation history
+    Reads the student's accessibility preferences
+    from the User object and sends the request to Gemini.
     """
 
     # ========================================================
-    # VALIDATE QUESTION
-    # ========================================================
-
-    if not isinstance(
-        question,
-        str,
-    ):
-
-        return (
-            "❌ Invalid question. "
-            "Please enter a text question."
-        )
-
-    question = question.strip()
-
-    if not question:
-
-        return (
-            "⚠️ Please enter a question."
-        )
-
-    # ========================================================
-    # USER LANGUAGE
+    # PREFERRED LANGUAGE
     # ========================================================
 
     preferred_language = getattr(
@@ -727,7 +833,7 @@ def ask_tutor(
     )
 
     # ========================================================
-    # VISUAL EXPLANATION
+    # VISUAL EXPLANATIONS
     # ========================================================
 
     visual_explanations = bool(
@@ -775,7 +881,7 @@ def ask_tutor(
     )
 
     # ========================================================
-    # DISABILITY INFORMATION
+    # DISABILITY TYPE
     # ========================================================
 
     disability_type = getattr(
@@ -784,6 +890,10 @@ def ask_tutor(
         None,
     )
 
+    # ========================================================
+    # DISABILITY DETAILS
+    # ========================================================
+
     disability_details = getattr(
         user,
         "disability_details",
@@ -791,11 +901,12 @@ def ask_tutor(
     )
 
     # ========================================================
-    # ASK AI
+    # CALL AI
     # ========================================================
 
     return ask_ai(
         question=question,
+        context=context,
         preferred_language=preferred_language,
         simplified_language=simplified_language,
         step_by_step_learning=step_by_step_learning,
@@ -817,8 +928,6 @@ def ask_tutor(
 def get_current_gemini_model() -> str:
     """
     Return the Gemini model currently used by EduAccess AI.
-
-    Useful for debugging.
     """
 
     return GEMINI_MODEL

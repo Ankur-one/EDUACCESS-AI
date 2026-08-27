@@ -1,15 +1,63 @@
-import uuid
+import importlib
 
-import streamlit as st  # type: ignore[import-not-found]
 
-from app.auth.session import get_current_user_id
-from app.database.database import SessionLocal
-from app.database.models import User
-from app.database.tutor_crud import (
-    save_tutor_conversation,
-    get_session_conversations,
+# ============================================================
+# TTS
+# ============================================================
+
+from app.audio.tts import (
+    show_text_to_speech
 )
-from app.ai.tutor_engine import ask_tutor
+
+
+# ============================================================
+# STT
+# ============================================================
+
+from app.audio.stt import (
+    show_speech_to_text
+)
+
+
+# ============================================================
+# OPTIONAL TUTOR PROMPT BUILDER
+# ============================================================
+
+try:
+
+    build_tutor_prompt = getattr(
+        importlib.import_module("app.tutor.prompt_builder"),
+        "build_tutor_prompt",
+        None,
+    )
+
+except ImportError:
+
+    build_tutor_prompt = None
+
+
+# ============================================================
+# STREAMLIT
+# ============================================================
+
+st = importlib.import_module("streamlit")
+
+
+# ============================================================
+# LANGUAGE MAPPING
+# ============================================================
+
+LANGUAGE_MAPPING = {
+
+    "English": "en-IN",
+
+    "English (India)": "en-IN",
+
+    "Hindi": "hi-IN",
+
+    "Punjabi": "pa-IN",
+
+}
 
 
 # ============================================================
@@ -17,526 +65,1083 @@ from app.ai.tutor_engine import ask_tutor
 # ============================================================
 
 def initialize_tutor_state():
+
     """
-    Initialize all Tutor-related Streamlit session variables.
+    Initialize all Tutor session-state values.
     """
 
-    if "tutor_session_id" not in st.session_state:
-        st.session_state.tutor_session_id = str(
-            uuid.uuid4()
-        )
+    # ========================================================
+    # QUESTION
+    # ========================================================
+
+    if "tutor_question" not in st.session_state:
+
+        st.session_state.tutor_question = ""
+
+
+    # ========================================================
+    # ANSWER
+    # ========================================================
 
     if "tutor_answer" not in st.session_state:
+
         st.session_state.tutor_answer = ""
 
-    if "continue_tutor_session" not in st.session_state:
-        st.session_state.continue_tutor_session = False
+
+    # ========================================================
+    # HISTORY
+    # ========================================================
+
+    if "tutor_history" not in st.session_state:
+
+        st.session_state.tutor_history = []
+
+
+    # ========================================================
+    # TTS AUTOPLAY
+    # ========================================================
+
+    if "tts_autoplay" not in st.session_state:
+
+        st.session_state.tts_autoplay = False
+
+
+    # ========================================================
+    # TTS VOICE
+    # ========================================================
+
+    if "tts_voice" not in st.session_state:
+
+        st.session_state.tts_voice = ""
+
+
+    # ========================================================
+    # TTS RATE
+    # ========================================================
+
+    if "tts_rate" not in st.session_state:
+
+        st.session_state.tts_rate = 0.9
+
+
+    # ========================================================
+    # TTS VOLUME
+    # ========================================================
+
+    if "tts_volume" not in st.session_state:
+
+        st.session_state.tts_volume = 1.0
+
+
+    # ========================================================
+    # TTS PITCH
+    # ========================================================
+
+    if "tts_pitch" not in st.session_state:
+
+        st.session_state.tts_pitch = 1.0
 
 
 # ============================================================
-# CREATE NEW TUTOR SESSION
+# GET STUDENT LANGUAGE
 # ============================================================
 
-def create_new_tutor_session():
+def get_student_language():
+
     """
-    Start a completely new AI Tutor session.
+    Get the student's preferred language.
+
+    Returns:
+        Language code such as en-IN, hi-IN, pa-IN.
     """
 
-    st.session_state.tutor_session_id = str(
-        uuid.uuid4()
+    language = st.session_state.get(
+        "preferred_language",
+        "English"
     )
 
-    st.session_state.tutor_answer = ""
 
-    st.session_state.continue_tutor_session = False
+    # ========================================================
+    # ALREADY A LANGUAGE CODE
+    # ========================================================
+
+    if language in LANGUAGE_MAPPING.values():
+
+        return language
 
 
-# ============================================================
-# LOAD CURRENT USER
-# ============================================================
+    # ========================================================
+    # LANGUAGE NAME -> CODE
+    # ========================================================
 
-def get_current_user(db, user_id):
-    """
-    Load the currently logged-in user from the database.
-    """
-
-    return (
-        db.query(User)
-        .filter(
-            User.id == user_id
-        )
-        .first()
+    return LANGUAGE_MAPPING.get(
+        language,
+        "en-IN"
     )
 
 
 # ============================================================
-# SHOW ACCESSIBILITY INFORMATION
+# 80.3.2 — TTS VOICE SELECTOR
 # ============================================================
 
-def show_accessibility_information(user):
+def show_tts_voice_selector():
+
     """
-    Display the student's saved accessibility preferences.
+    Display the Streamlit TTS voice selector.
+
+    The selected voice is stored in:
+
+        st.session_state.tts_voice
     """
 
-    st.subheader(
-        "♿ Accessibility & Learning Preferences"
+    # ========================================================
+    # COMMON BROWSER VOICES
+    # ========================================================
+
+    common_voices = [
+
+        "Default browser voice",
+
+        "Google US English",
+
+        "Google UK English Female",
+
+        "Google UK English Male",
+
+        "Microsoft David",
+
+        "Microsoft Zira",
+
+        "Microsoft Mark",
+
+        "Microsoft Ravi",
+
+        "Microsoft Heera",
+
+        "Microsoft Kalpana",
+
+        "Microsoft Hemant",
+
+    ]
+
+
+    # ========================================================
+    # CURRENT VOICE
+    # ========================================================
+
+    current_voice = (
+        st.session_state.get(
+            "tts_voice",
+            ""
+        )
     )
 
-    st.write(
-        "🌐 Language: "
-        f"**{user.preferred_language or 'English'}**"
+
+    # ========================================================
+    # DEFAULT INDEX
+    # ========================================================
+
+    if current_voice in common_voices:
+
+        default_index = (
+            common_voices.index(
+                current_voice
+            )
+        )
+
+    else:
+
+        default_index = 0
+
+
+    # ========================================================
+    # SELECT VOICE
+    # ========================================================
+
+    selected_voice = st.selectbox(
+
+        "🎙️ TTS Voice",
+
+        options=common_voices,
+
+        index=default_index,
+
+        key="tts_voice_selector",
+
+        help=(
+            "Select the voice that the AI Tutor "
+            "should use when reading answers."
+        ),
     )
 
-    preferences = []
 
-    if user.simple_explanation:
-        preferences.append(
-            "✓ Simple explanations"
+    # ========================================================
+    # SAVE SELECTED VOICE
+    # ========================================================
+
+    if selected_voice == (
+        "Default browser voice"
+    ):
+
+        st.session_state.tts_voice = ""
+
+    else:
+
+        st.session_state.tts_voice = (
+            selected_voice
         )
 
-    if user.step_by_step:
-        preferences.append(
-            "✓ Step-by-step learning"
+
+    # ========================================================
+    # SHOW CURRENT VOICE
+    # ========================================================
+
+    if st.session_state.tts_voice:
+
+        st.caption(
+            "🎙️ Selected voice: "
+            f"{st.session_state.tts_voice}"
         )
-
-    if user.repetition_support:
-        preferences.append(
-            "✓ Repetition support"
-        )
-
-    if user.visual_explanation:
-        preferences.append(
-            "✓ Visual explanations"
-        )
-
-    if user.text_to_speech:
-        preferences.append(
-            "✓ Text-to-speech"
-        )
-
-    if user.speech_to_text:
-        preferences.append(
-            "✓ Speech-to-text"
-        )
-
-    if user.large_text:
-        preferences.append(
-            "✓ Large text"
-        )
-
-    if user.high_contrast:
-        preferences.append(
-            "✓ High contrast"
-        )
-
-    if user.dyslexia_friendly:
-        preferences.append(
-            "✓ Dyslexia friendly"
-        )
-
-    if preferences:
-
-        for preference in preferences:
-            st.write(preference)
 
     else:
 
         st.caption(
-            "No additional accessibility preferences "
-            "are currently enabled."
+            "🎙️ Selected voice: "
+            "Default browser voice"
         )
 
 
+    return st.session_state.tts_voice
+
+
 # ============================================================
-# DISPLAY CONVERSATION
+# 80.3.3 — TTS ACCESSIBILITY SETTINGS
 # ============================================================
 
-def show_conversation(conversations):
+def show_tts_accessibility_settings():
+
     """
-    Display the current Tutor session conversation.
+    Display all TTS accessibility settings.
     """
 
-    st.subheader(
-        "💬 Current Conversation"
-    )
+    with st.expander(
 
-    if not conversations:
+        "🔊 TTS Accessibility Settings",
 
-        st.info(
-            "👋 This is a new Tutor session. "
-            "Ask your first question below."
+        expanded=False,
+
+    ):
+
+        st.caption(
+            "Customize how the AI Tutor speaks to you."
         )
 
-        return
 
-    for conversation in conversations:
+        # ====================================================
+        # TTS VOICE
+        # ====================================================
 
-        question = str(
-            getattr(
-                conversation,
-                "question",
-                "",
+        show_tts_voice_selector()
+
+
+        # ====================================================
+        # AUTOPLAY
+        # ====================================================
+
+        autoplay_enabled = st.checkbox(
+
+            "🔊 Automatically read AI answers",
+
+            value=(
+                st.session_state.tts_autoplay
+            ),
+
+            key="tts_autoplay_control",
+
+            help=(
+                "Automatically read the AI Tutor "
+                "answer after it is generated."
+            ),
+        )
+
+
+        st.session_state.tts_autoplay = (
+            autoplay_enabled
+        )
+
+
+        # ====================================================
+        # SPEECH SPEED
+        # ====================================================
+
+        speech_rate = st.slider(
+
+            "🐢 Speech speed",
+
+            min_value=0.5,
+
+            max_value=1.5,
+
+            value=float(
+                st.session_state.tts_rate
+            ),
+
+            step=0.1,
+
+            key="tts_rate_control",
+
+            help=(
+                "Lower values make speech slower. "
+                "Higher values make speech faster."
+            ),
+        )
+
+
+        st.session_state.tts_rate = (
+            speech_rate
+        )
+
+
+        # ====================================================
+        # VOLUME
+        # ====================================================
+
+        speech_volume = st.slider(
+
+            "🔊 Speech volume",
+
+            min_value=0.0,
+
+            max_value=1.0,
+
+            value=float(
+                st.session_state.tts_volume
+            ),
+
+            step=0.1,
+
+            key="tts_volume_control",
+
+            help=(
+                "Controls the volume of the AI Tutor voice."
+            ),
+        )
+
+
+        st.session_state.tts_volume = (
+            speech_volume
+        )
+
+
+        # ====================================================
+        # PITCH
+        # ====================================================
+
+        speech_pitch = st.slider(
+
+            "🎵 Voice pitch",
+
+            min_value=0.5,
+
+            max_value=1.5,
+
+            value=float(
+                st.session_state.tts_pitch
+            ),
+
+            step=0.1,
+
+            key="tts_pitch_control",
+
+            help=(
+                "Controls the pitch of the AI Tutor voice."
+            ),
+        )
+
+
+        st.session_state.tts_pitch = (
+            speech_pitch
+        )
+
+
+        # ====================================================
+        # CURRENT SETTINGS
+        # ====================================================
+
+        st.markdown(
+            "### Current TTS Settings"
+        )
+
+
+        col1, col2, col3 = st.columns(3)
+
+
+        with col1:
+
+            st.metric(
+
+                "Speed",
+
+                f"{st.session_state.tts_rate:.1f}x",
+
             )
-            or ""
-        ).strip()
 
-        answer = str(
-            getattr(
-                conversation,
-                "answer",
-                "",
+
+        with col2:
+
+            st.metric(
+
+                "Volume",
+
+                f"{int(st.session_state.tts_volume * 100)}%",
+
             )
-            or ""
-        ).strip()
 
-        if question:
 
-            with st.chat_message("user"):
+        with col3:
 
-                st.markdown(question)
+            st.metric(
 
-        if answer:
+                "Pitch",
 
-            with st.chat_message("assistant"):
+                f"{st.session_state.tts_pitch:.1f}",
 
-                st.markdown(answer)
+            )
+
+
+        # ====================================================
+        # ACCESSIBILITY PRESET
+        # ====================================================
+
+        st.markdown(
+            "### ♿ Accessibility Preset"
+        )
+
+
+        if st.button(
+
+            "♿ Enable Easy Listening",
+
+            use_container_width=True,
+
+            key="easy_listening_button",
+
+        ):
+
+            st.session_state.tts_rate = 0.7
+
+            st.session_state.tts_volume = 1.0
+
+            st.session_state.tts_pitch = 1.0
+
+
+            # ------------------------------------------------
+            # CLEAR SLIDER WIDGET STATE
+            # ------------------------------------------------
+
+            st.session_state.pop(
+                "tts_rate_control",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_volume_control",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_pitch_control",
+                None,
+            )
+
+
+            st.success(
+                "♿ Easy Listening enabled."
+            )
+
+
+            st.rerun()
+
+
+        # ====================================================
+        # RESET
+        # ====================================================
+
+        if st.button(
+
+            "🔄 Reset TTS Settings",
+
+            use_container_width=True,
+
+            key="reset_tts_button",
+
+        ):
+
+            # ------------------------------------------------
+            # RESET VALUES
+            # ------------------------------------------------
+
+            st.session_state.tts_voice = ""
+
+            st.session_state.tts_rate = 0.9
+
+            st.session_state.tts_volume = 1.0
+
+            st.session_state.tts_pitch = 1.0
+
+            st.session_state.tts_autoplay = False
+
+
+            # ------------------------------------------------
+            # CLEAR WIDGET STATE
+            # ------------------------------------------------
+
+            st.session_state.pop(
+                "tts_voice_selector",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_autoplay_control",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_rate_control",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_volume_control",
+                None,
+            )
+
+            st.session_state.pop(
+                "tts_pitch_control",
+                None,
+            )
+
+
+            st.success(
+                "🔄 TTS settings have been reset."
+            )
+
+
+            st.rerun()
 
 
 # ============================================================
-# SHOW TUTOR
+# TUTOR PAGE
 # ============================================================
 
 def show_tutor():
+
     """
-    Main AI Tutor interface.
+    Display the AI Tutor.
     """
 
     # ========================================================
-    # INITIALIZE STATE
+    # INITIALIZE
     # ========================================================
 
     initialize_tutor_state()
 
+
     # ========================================================
-    # PAGE HEADER
+    # TITLE
     # ========================================================
 
     st.title(
-        "🤖 EduAccess AI Tutor"
+        "🤖 AI Tutor"
     )
+
 
     st.caption(
-        "Ask questions using text or voice and receive "
-        "personalized accessible explanations."
+        "Ask questions using text or your voice."
     )
 
-    st.divider()
 
     # ========================================================
-    # CURRENT USER ID
+    # LANGUAGE
     # ========================================================
 
-    user_id = get_current_user_id()
-
-    if user_id is None:
-
-        st.warning(
-            "⚠️ User session not found. "
-            "Please login again."
-        )
-
-        return
-
-    # ========================================================
-    # CURRENT SESSION ID
-    # ========================================================
-
-    session_id = (
-        st.session_state.tutor_session_id
+    preferred_language = (
+        get_student_language()
     )
 
+
     # ========================================================
-    # DATABASE
+    # ACTIVE LANGUAGE
     # ========================================================
 
-    db = SessionLocal()
+    st.info(
 
-    try:
+        f"🌐 Active language: "
+        f"**{preferred_language}**"
 
-        # ====================================================
-        # LOAD USER
-        # ====================================================
+    )
 
-        user = get_current_user(
-            db=db,
-            user_id=user_id,
+
+    # ========================================================
+    # TTS SETTINGS
+    # ========================================================
+
+    show_tts_accessibility_settings()
+
+
+    # ========================================================
+    # VOICE QUESTION
+    # ========================================================
+
+    st.subheader(
+        "🎤 Ask by Voice"
+    )
+
+
+    voice_question = (
+        show_speech_to_text(
+            language=preferred_language
+        )
+    )
+
+
+    # ========================================================
+    # TEXT QUESTION
+    # ========================================================
+
+    st.subheader(
+        "⌨️ Ask by Text"
+    )
+
+
+    text_question = st.text_area(
+
+        "Enter your question:",
+
+        value=(
+            st.session_state.tutor_question
+        ),
+
+        height=120,
+
+        placeholder=(
+            "Example: Explain photosynthesis "
+            "in simple words."
+        ),
+
+    )
+
+
+    # ========================================================
+    # SELECT QUESTION
+    # ========================================================
+
+    question = ""
+
+
+    # ========================================================
+    # VOICE QUESTION
+    # ========================================================
+
+    if voice_question:
+
+        question = voice_question
+
+        st.success(
+
+            f"🎤 Voice question detected: "
+            f"{voice_question}"
+
         )
 
-        if user is None:
 
-            st.error(
-                "❌ User account could not be found."
+    # ========================================================
+    # TEXT QUESTION
+    # ========================================================
+
+    elif text_question.strip():
+
+        question = (
+            text_question.strip()
+        )
+
+
+    # ========================================================
+    # ASK BUTTON
+    # ========================================================
+
+    ask_button = st.button(
+
+        "🤖 Ask AI Tutor",
+
+        type="primary",
+
+        use_container_width=True,
+
+    )
+
+
+    # ========================================================
+    # PROCESS QUESTION
+    # ========================================================
+
+    if ask_button:
+
+        # ----------------------------------------------------
+        # EMPTY QUESTION
+        # ----------------------------------------------------
+
+        if not question:
+
+            st.warning(
+
+                "Please enter a question "
+                "or ask using the microphone."
+
             )
 
             return
 
-        # ====================================================
-        # SESSION CONTROLS
-        # ====================================================
 
-        col1, col2 = st.columns(2)
+        # ----------------------------------------------------
+        # SAVE QUESTION
+        # ----------------------------------------------------
 
-        with col1:
-
-            new_session_button = st.button(
-                "🆕 New Tutor Session",
-                use_container_width=True,
-                key="new_tutor_session_button",
-            )
-
-        with col2:
-
-            continue_session_button = st.button(
-                "↩️ Continue Current Session",
-                use_container_width=True,
-                key="continue_tutor_session_button",
-            )
-
-        # ====================================================
-        # NEW SESSION
-        # ====================================================
-
-        if new_session_button:
-
-            create_new_tutor_session()
-
-            st.rerun()
-
-        # ====================================================
-        # CONTINUE SESSION
-        # ========================================================
-
-        if continue_session_button:
-
-            st.session_state.continue_tutor_session = True
-
-        # ====================================================
-        # ACCESSIBILITY
-        # ====================================================
-
-        with st.expander(
-            "♿ Accessibility Settings",
-            expanded=False,
-        ):
-
-            show_accessibility_information(
-                user
-            )
-
-        st.divider()
-
-        # ====================================================
-        # LOAD CONVERSATIONS
-        # ====================================================
-
-        conversations = get_session_conversations(
-            db=db,
-            user_id=user_id,
-            session_id=session_id,
-            limit=100,
+        st.session_state.tutor_question = (
+            question
         )
 
-        # ====================================================
-        # SHOW CONVERSATION
-        # ====================================================
 
-        show_conversation(
-            conversations
-        )
+        # ----------------------------------------------------
+        # BUILD PROMPT
+        # ----------------------------------------------------
 
-        st.divider()
-
-        # ====================================================
-        # QUESTION SECTION
-        # ====================================================
-
-        st.subheader(
-            "❓ Ask the AI Tutor"
-        )
-
-        st.caption(
-            "Type your question below."
-        )
-
-        # ====================================================
-        # QUESTION FORM
-        #
-        # Using a form prevents us from modifying the
-        # widget's session state after it has been created.
-        # ====================================================
-
-        with st.form(
-            key="tutor_question_form",
-            clear_on_submit=True,
-        ):
-
-            question = st.text_area(
-                "Your question",
-                placeholder=(
-                    "Example: Explain inheritance in Java "
-                    "with a simple example."
-                ),
-                height=150,
-                key="tutor_question",
-            )
-
-            ask_button = st.form_submit_button(
-                "🤖 Ask AI Tutor",
-                use_container_width=True,
-            )
-
-        # ====================================================
-        # PROCESS QUESTION
-        # ====================================================
-
-        if ask_button:
-
-            clean_question = (
-                question.strip()
-                if isinstance(
-                    question,
-                    str,
-                )
-                else ""
-            )
-
-            # ------------------------------------------------
-            # VALIDATION
-            # ------------------------------------------------
-
-            if not clean_question:
-
-                st.warning(
-                    "⚠️ Please enter a question first."
-                )
-
-                return
-
-            # ------------------------------------------------
-            # RELOAD CONVERSATION HISTORY
-            # ------------------------------------------------
-
-            conversation_history = (
-                get_session_conversations(
-                    db=db,
-                    user_id=user_id,
-                    session_id=session_id,
-                    limit=100,
-                )
-            )
-
-            # ------------------------------------------------
-            # ASK AI
-            # ------------------------------------------------
-
-            with st.spinner(
-                "🤖 EduAccess AI is thinking..."
-            ):
-
-                answer = ask_tutor(
-                    user=user,
-                    question=clean_question,
-                    conversation_history=conversation_history,
-                )
-
-            # ------------------------------------------------
-            # VALIDATE ANSWER
-            # ------------------------------------------------
-
-            if not answer:
-
-                st.error(
-                    "❌ The AI Tutor did not return an answer."
-                )
-
-                return
-
-            # ------------------------------------------------
-            # SAVE CONVERSATION
-            # ------------------------------------------------
+        if build_tutor_prompt:
 
             try:
 
-                save_tutor_conversation(
-                    db=db,
-                    user_id=user_id,
-                    session_id=session_id,
-                    question=clean_question,
-                    answer=str(answer),
+                prompt = build_tutor_prompt(
+
+                    question=question,
+
+                    language=preferred_language,
+
                 )
 
-            except Exception as save_error:
+            except TypeError:
 
-                db.rollback()
+                prompt = build_tutor_prompt(
+                    question
+                )
+
+        else:
+
+            prompt = f"""
+You are an inclusive AI Tutor.
+
+Answer the student's question clearly.
+
+Student language:
+{preferred_language}
+
+Student question:
+{question}
+
+Requirements:
+
+- Explain concepts simply.
+- Use step-by-step explanations when useful.
+- Repeat important concepts when useful.
+- Use examples.
+- Avoid unnecessary complexity.
+- Be supportive and accessible.
+"""
+
+
+        # ----------------------------------------------------
+        # GENERATE ANSWER
+        # ----------------------------------------------------
+
+        with st.spinner(
+            "🤖 AI Tutor is thinking..."
+        ):
+
+            try:
+
+                answer = generate_tutor_response(
+                    prompt
+                )
+
+            except Exception as error:
 
                 st.error(
-                    "⚠️ The AI answered, but the "
-                    "conversation could not be saved."
+                    "Unable to generate the Tutor answer."
                 )
 
                 st.exception(
-                    save_error
+                    error
                 )
 
                 return
 
-            # ------------------------------------------------
-            # STORE LATEST ANSWER
-            # ------------------------------------------------
 
-            st.session_state.tutor_answer = str(
-                answer
-            )
+        # ----------------------------------------------------
+        # SAVE ANSWER
+        # ----------------------------------------------------
 
-            # ------------------------------------------------
-            # REFRESH PAGE
-            #
-            # clear_on_submit=True already clears the form.
-            # We do NOT modify st.session_state.tutor_question.
-            # ------------------------------------------------
+        st.session_state.tutor_answer = (
+            answer
+        )
 
-            st.rerun()
+
+        # ----------------------------------------------------
+        # SAVE HISTORY
+        # ----------------------------------------------------
+
+        st.session_state.tutor_history.append(
+
+            {
+                "question": question,
+
+                "answer": answer,
+            }
+
+        )
+
+
+    # ========================================================
+    # DISPLAY ANSWER
+    # ========================================================
+
+    if st.session_state.tutor_answer:
+
+        st.divider()
+
+
+        st.subheader(
+            "📚 AI Tutor Answer"
+        )
+
+
+        st.markdown(
+            st.session_state.tutor_answer
+        )
+
 
         # ====================================================
-        # LATEST ANSWER
+        # TTS
         # ====================================================
 
-        if st.session_state.tutor_answer:
+        show_text_to_speech(
 
-            st.divider()
-
-            st.subheader(
-                "🤖 Latest AI Answer"
-            )
-
-            st.markdown(
+            text=(
                 st.session_state.tutor_answer
-            )
+            ),
+
+            language=(
+                preferred_language
+            ),
+
+            autoplay=(
+                st.session_state.tts_autoplay
+            ),
+
+            selected_voice=(
+                st.session_state.tts_voice
+            ),
+
+            speech_rate=(
+                st.session_state.tts_rate
+            ),
+
+            volume=(
+                st.session_state.tts_volume
+            ),
+
+            pitch=(
+                st.session_state.tts_pitch
+            ),
+
+        )
+
+
+# ============================================================
+# AI RESPONSE
+# ============================================================
+
+def generate_tutor_response(
+    prompt: str
+) -> str:
+
+    """
+    Generate the AI Tutor response.
+    """
 
     # ========================================================
-    # ERROR HANDLING
+    # EXISTING AI MODULE
     # ========================================================
+
+    try:
+
+        ai_module = importlib.import_module(
+            "app.ai.gemini"
+        )
+
+
+        # ----------------------------------------------------
+        # generate_response
+        # ----------------------------------------------------
+
+        if hasattr(
+            ai_module,
+            "generate_response"
+        ):
+
+            response = (
+                ai_module.generate_response(
+                    prompt
+                )
+            )
+
+            return str(
+                response
+            )
+
+
+        # ----------------------------------------------------
+        # generate_content
+        # ----------------------------------------------------
+
+        if hasattr(
+            ai_module,
+            "generate_content"
+        ):
+
+            response = (
+                ai_module.generate_content(
+                    prompt
+                )
+            )
+
+            return str(
+                response
+            )
+
+
+        # ----------------------------------------------------
+        # ask_gemini
+        # ----------------------------------------------------
+
+        if hasattr(
+            ai_module,
+            "ask_gemini"
+        ):
+
+            response = (
+                ai_module.ask_gemini(
+                    prompt
+                )
+            )
+
+            return str(
+                response
+            )
+
+
+    except ImportError:
+
+        pass
+
+
+    # ========================================================
+    # GOOGLE GENAI FALLBACK
+    # ========================================================
+
+    try:
+
+        genai = importlib.import_module(
+            "google.genai"
+        )
+
+
+        # ----------------------------------------------------
+        # API KEY
+        # ----------------------------------------------------
+
+        api_key = ""
+
+
+        try:
+
+            api_key = st.secrets.get(
+                "GEMINI_API_KEY",
+                ""
+            )
+
+        except Exception:
+
+            api_key = ""
+
+
+        if not api_key:
+
+            raise RuntimeError(
+                "GEMINI_API_KEY is not configured."
+            )
+
+
+        # ----------------------------------------------------
+        # CLIENT
+        # ----------------------------------------------------
+
+        client = genai.Client(
+            api_key=api_key
+        )
+
+
+        # ----------------------------------------------------
+        # GENERATE RESPONSE
+        # ----------------------------------------------------
+
+        response = (
+            client.models.generate_content(
+
+                model="gemini-3.6-flash",
+
+                contents=prompt,
+
+            )
+        )
+
+
+        # ----------------------------------------------------
+        # RETURN TEXT
+        # ----------------------------------------------------
+
+        if hasattr(
+            response,
+            "text"
+        ):
+
+            return response.text
+
+
+        return str(
+            response
+        )
+
 
     except Exception as error:
 
-        st.error(
-            "❌ AI Tutor encountered an error."
-        )
+        raise RuntimeError(
+            "Unable to generate AI Tutor response."
+        ) from error
 
-        st.exception(
-            error
-        )
 
-    finally:
+# ============================================================
+# MAIN
+# ============================================================
 
-        db.close()
+if __name__ == "__main__":
+
+    show_tutor()
