@@ -1,15 +1,31 @@
-from app.database.database import Base, engine
-def init_database():
+# ============================================================
+# app/database/init_db.py
+# ============================================================
 
-    print("Creating EduAccess AI database...")
+from app.database.database import (
+    Base,
+    engine,
+)
+
+# ============================================================
+# INITIALIZE DATABASE
+# ============================================================
+
+def init_database():
+    """
+    Create database tables that do not already exist.
+    """
 
     Base.metadata.create_all(
         bind=engine
     )
 
-    print("Database created successfully.")
 
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
-
     init_database()
+    print("✅ Database initialized successfully.")
+

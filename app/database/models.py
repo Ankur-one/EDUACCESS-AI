@@ -1,26 +1,31 @@
+# ============================================================
+# app/database/models.py
+# ============================================================
+
 from datetime import datetime
 
-from sqlalchemy import (  # type: ignore[import-not-found]
-    Column,
-    Integer,
-    String,
+from sqlalchemy import (  # type: ignore
     Boolean,
-    Text,
+    Column,
     DateTime,
     ForeignKey,
+    Integer,
+    String,
+    Text,
 )
-
-from sqlalchemy.orm import relationship  # type: ignore[import-not-found]
+from sqlalchemy.orm import relationship  # type: ignore
 
 from app.database.database import Base
+
+"""Database models for the EduAccess application."""
 
 
 # ============================================================
 # USER MODEL
 # ============================================================
 
-class User(Base):
 
+class User(Base):
     __tablename__ = "users"
 
     # ========================================================
@@ -112,6 +117,67 @@ class User(Base):
     )
 
     # ========================================================
+    # TTS VOICE
+    #
+    # Stores the browser voice name selected by the student.
+    # Empty string means browser automatic/default voice.
+    # ========================================================
+
+    tts_voice = Column(
+        String(255),
+        nullable=True,
+        default="",
+    )
+
+    # ========================================================
+    # TTS AUTOPLAY
+    # ========================================================
+
+    tts_autoplay = Column(
+        Boolean,
+        default=False,
+    )
+
+    # ========================================================
+    # TTS SPEECH RATE
+    #
+    # Stored as String so existing SQLite database values
+    # remain compatible with the current schema.
+    # Default: 0.9
+    # ========================================================
+
+    tts_rate = Column(
+        String(20),
+        default="0.9",
+        nullable=True,
+    )
+
+    # ========================================================
+    # TTS VOLUME
+    #
+    # Range normally used by the UI:
+    # 0.0 - 1.0
+    # ========================================================
+
+    tts_volume = Column(
+        String(20),
+        default="1.0",
+        nullable=True,
+    )
+
+    # ========================================================
+    # TTS PITCH
+    #
+    # Default: 1.0
+    # ========================================================
+
+    tts_pitch = Column(
+        String(20),
+        default="1.0",
+        nullable=True,
+    )
+
+    # ========================================================
     # VISUAL ACCESSIBILITY
     # ========================================================
 
@@ -131,7 +197,7 @@ class User(Base):
     )
 
     # ========================================================
-    # RELATIONSHIP WITH TUTOR CONVERSATIONS
+    # TUTOR CONVERSATIONS
     # ========================================================
 
     tutor_conversations = relationship(
@@ -145,8 +211,8 @@ class User(Base):
 # TUTOR CONVERSATION MODEL
 # ============================================================
 
-class TutorConversation(Base):
 
+class TutorConversation(Base):
     __tablename__ = "tutor_conversations"
 
     # ========================================================
@@ -174,7 +240,7 @@ class TutorConversation(Base):
     )
 
     # ========================================================
-    # CONVERSATION SESSION ID
+    # SESSION ID
     # ========================================================
 
     session_id = Column(
@@ -184,7 +250,7 @@ class TutorConversation(Base):
     )
 
     # ========================================================
-    # STUDENT QUESTION
+    # QUESTION
     # ========================================================
 
     question = Column(
@@ -193,7 +259,7 @@ class TutorConversation(Base):
     )
 
     # ========================================================
-    # AI ANSWER
+    # ANSWER
     # ========================================================
 
     answer = Column(

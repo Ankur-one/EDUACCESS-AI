@@ -1,663 +1,585 @@
-import importlib
+# ============================================================
+# app/audio/tts.py
+# EDUACCESS-AI — TEXT TO SPEECH
+# ============================================================
+# NOTE: This file must not contain Markdown code fences such as
+# ```python ... ``` . If copied from documentation, strip them
+# before saving or the Python parser will fail on the opening tick.
+
+import json
+
+try:
+    import streamlit as st  # type: ignore
+    import streamlit.components.v1 as components  # type: ignore
+except ImportError:  # pragma: no cover
+    class _MissingStreamlitModule:
+        def __getattr__(self, _name):
+            raise RuntimeError("streamlit is required to run EduAccess-AI TTS.")
+
+    class _MissingComponentsModule:
+        @staticmethod
+        def html(*args, **kwargs):
+            raise RuntimeError("streamlit is required to run EduAccess-AI TTS.")
+
+    st = _MissingStreamlitModule()
+    components = _MissingComponentsModule()
 
 
 # ============================================================
-# STREAMLIT
+# LANGUAGE MAPPING
 # ============================================================
 
-st = importlib.import_module("streamlit")
+TTS_LANGUAGES = {
+    "English": "en-US",
+    "Hindi": "hi-IN",
+    "Punjabi": "pa-IN",
+}
+
+
+def _strip_markdown_fences(code: str) -> str:
+    """
+    Remove accidental Markdown code fences from copied/pasted snippets.
+    This prevents Python syntax errors caused by stray backticks at the
+    start of a file or script block.
+    """
+    if not isinstance(code, str):
+        return code
+
+    cleaned = code.strip()
+
+    if not cleaned.startswith("```"):
+        return cleaned
+
+    lines = cleaned.splitlines()
+
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+
+    if lines and lines[-1].rstrip().endswith("```"):
+        lines[-1] = lines[-1].rstrip()
+        if lines[-1].endswith("```"):
+            lines[-1] = lines[-1][:-3].rstrip()
+
+    cleaned = "\n".join(lines).strip()
+
+    if cleaned.startswith("python"):
+        cleaned = cleaned[6:].lstrip()
+
+    return cleaned
 
 
 # ============================================================
-# TEXT TO SPEECH
+# GET TTS LANGUAGE
 # ============================================================
 
-def show_text_to_speech(
+def get_tts_language(language_name: str) -> str:
+    """
+    Convert application language name to browser TTS language code.
+    """
+
+    if not language_name:
+        return "en-US"
+
+    return TTS_LANGUAGES.get(
+        str(language_name),
+        "en-US",
+    )
+
+
+# ============================================================
+# GET AVAILABLE TTS VOICES
+# ============================================================
+
+def get_available_tts_voices():
+    """
+    Return an empty list on the Python side.
+
+    Browser speech voices are actually discovered by JavaScript
+    inside the user's browser.
+
+    This function is kept for compatibility with tutor.py.
+    """
+
+    return []
+
+
+# ============================================================
+# BACKWARD-COMPATIBILITY ALIAS
+# ============================================================
+
+def get_available_voices():
+    """
+    Compatibility alias used by older tutor.py versions.
+    """
+
+    return get_available_tts_voices()
+
+
+# ============================================================
+# BUILD TTS JAVASCRIPT
+# ============================================================
+
+def _build_tts_javascript(
     text: str,
-    language: str = "en-IN",
-    autoplay: bool = False,
+    language: str = "en-US",
     selected_voice: str = "",
     speech_rate: float = 0.9,
     volume: float = 1.0,
     pitch: float = 1.0,
-):
+    autoplay: bool = True,
+) -> str:
     """
-    Browser-based Text-to-Speech.
-
-    The browser's SpeechSynthesis API is used to detect
-    and use voices available on the student's device.
+    Build browser JavaScript for SpeechSynthesis.
     """
 
-    if not text:
-        return
-
-
-    # ========================================================
-    # ESCAPE TEXT
-    # ========================================================
-
-    escaped_text = (
+    safe_text = json.dumps(
         str(text)
-        .replace("\\", "\\\\")
-        .replace("`", "\\`")
-        .replace("${", "\\${")
     )
 
-
-    # ========================================================
-    # ESCAPE LANGUAGE
-    # ========================================================
-
-    escaped_language = (
-        str(language)
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
+    safe_language = json.dumps(
+        str(language or "en-US")
     )
 
-
-    # ========================================================
-    # ESCAPE SELECTED VOICE
-    # ========================================================
-
-    escaped_voice = (
-        str(selected_voice)
-        .replace("\\", "\\\\")
-        .replace("'", "\\'")
+    safe_voice = json.dumps(
+        str(selected_voice or "")
     )
 
+    try:
+        rate = float(speech_rate)
+    except (TypeError, ValueError):
+        rate = 0.9
 
-    # ========================================================
-    # AUTOPLAY
-    # ========================================================
+    try:
+        vol = float(volume)
+    except (TypeError, ValueError):
+        vol = 1.0
 
-    autoplay_code = ""
+    try:
+        pt = float(pitch)
+    except (TypeError, ValueError):
+        pt = 1.0
 
-    if autoplay:
+    # Keep browser values within safe ranges.
+    rate = max(0.1, min(10.0, rate))
+    vol = max(0.0, min(1.0, vol))
+    pt = max(0.0, min(2.0, pt))
 
-        autoplay_code = """
-        setTimeout(
-            function() {
-                speakText();
-            },
-            700
-        );
-        """
+    autoplay_value = (
+        "true"
+        if autoplay
+        else "false"
+    )
 
+    return f"""
+<script>
 
-    # ========================================================
-    # HTML COMPONENT
-    # ========================================================
+(function() {{
 
-    component_html = """
+    const text = {safe_text};
+    const language = {safe_language};
+    const selectedVoiceName = {safe_voice};
 
-    <div style="
-        padding: 15px;
-        border: 1px solid #cccccc;
-        border-radius: 10px;
-        margin-top: 12px;
-        font-family: Arial, sans-serif;
-    ">
+    const speechRate = {rate};
+    const speechVolume = {vol};
+    const speechPitch = {pt};
 
-        <strong>
-            🔊 Read AI Answer
-        </strong>
+    const autoplay = {autoplay_value};
 
-        <br><br>
 
+    function speakText() {{
 
-        <!-- ================================================= -->
-        <!-- VOICE SELECTOR -->
-        <!-- ================================================= -->
-
-        <label for="voiceSelect">
-            🎙️ Available Voices
-        </label>
-
-        <br>
-
-        <select
-            id="voiceSelect"
-            style="
-                width: 100%;
-                padding: 8px;
-                margin-top: 6px;
-                margin-bottom: 12px;
-            "
-        >
-
-            <option value="">
-                Loading voices...
-            </option>
-
-        </select>
-
-
-        <!-- ================================================= -->
-        <!-- PLAY BUTTON -->
-        <!-- ================================================= -->
-
-        <button
-            onclick="speakText()"
-            style="
-                padding: 8px 16px;
-                margin-right: 8px;
-                cursor: pointer;
-            "
-        >
-            ▶️ Play
-        </button>
-
-
-        <!-- ================================================= -->
-        <!-- STOP BUTTON -->
-        <!-- ================================================= -->
-
-        <button
-            onclick="stopSpeech()"
-            style="
-                padding: 8px 16px;
-                cursor: pointer;
-            "
-        >
-            ⏹️ Stop
-        </button>
-
-
-        <br><br>
-
-
-        <!-- ================================================= -->
-        <!-- STATUS -->
-        <!-- ================================================= -->
-
-        <small id="voiceStatus">
-            Detecting available voices...
-        </small>
-
-    </div>
-
-
-    <script>
-
-    // ========================================================
-    // TUTOR DATA
-    // ========================================================
-
-    const tutorText =
-        `{escaped_text}`;
-
-    const tutorLanguage =
-        `{escaped_language}`;
-
-    const previousVoice =
-        `{escaped_voice}`;
-
-    const tutorRate =
-        {speech_rate};
-
-    const tutorVolume =
-        {volume};
-
-    const tutorPitch =
-        {pitch};
-
-
-    // ========================================================
-    // ELEMENTS
-    // ========================================================
-
-    const voiceSelect =
-        document.getElementById(
-            "voiceSelect"
-        );
-
-
-    const voiceStatus =
-        document.getElementById(
-            "voiceStatus"
-        );
-
-
-    // ========================================================
-    // GET LANGUAGE PREFIX
-    // ========================================================
-
-    function getLanguagePrefix(language) {
-
-        return language
-            .split("-")[0]
-            .toLowerCase();
-
-    }
-
-
-    const languagePrefix =
-        getLanguagePrefix(
-            tutorLanguage
-        );
-
-
-    // ========================================================
-    // LOAD AVAILABLE VOICES
-    // ========================================================
-
-    function loadVoices() {
-
-        const voices =
-            window.speechSynthesis
-                .getVoices();
-
-
-        // ----------------------------------------------------
-        // CLEAR SELECTOR
-        // ----------------------------------------------------
-
-        voiceSelect.innerHTML = "";
-
-
-        // ----------------------------------------------------
-        // DEFAULT VOICE
-        // ----------------------------------------------------
-
-        const defaultOption =
-            document.createElement(
-                "option"
-            );
-
-
-        defaultOption.value = "";
-
-
-        defaultOption.textContent =
-            "🔊 Default voice";
-
-
-        voiceSelect.appendChild(
-            defaultOption
-        );
-
-
-        // ----------------------------------------------------
-        // SORT VOICES
-        // ----------------------------------------------------
-
-        const sortedVoices =
-            voices.slice().sort(
-                function(a, b) {
-
-                    const aLanguage =
-                        a.lang
-                            .toLowerCase()
-                            .startsWith(
-                                languagePrefix
-                            );
-
-                    const bLanguage =
-                        b.lang
-                            .toLowerCase()
-                            .startsWith(
-                                languagePrefix
-                            );
-
-
-                    if (
-                        aLanguage &&
-                        !bLanguage
-                    ) {
-
-                        return -1;
-
-                    }
-
-
-                    if (
-                        !aLanguage &&
-                        bLanguage
-                    ) {
-
-                        return 1;
-
-                    }
-
-
-                    return a.name.localeCompare(
-                        b.name
-                    );
-
-                }
-            );
-
-
-        // ----------------------------------------------------
-        // ADD VOICES
-        // ----------------------------------------------------
-
-        sortedVoices.forEach(
-            function(voice) {
-
-                const option =
-                    document.createElement(
-                        "option"
-                    );
-
-
-                option.value =
-                    voice.name;
-
-
-                let label =
-                    voice.name;
-
-
-                if (voice.lang) {
-
-                    label +=
-                        " (" +
-                        voice.lang +
-                        ")";
-
-                }
-
-
-                // ------------------------------------------------
-                // LANGUAGE MATCH
-                // ------------------------------------------------
-
-                if (
-                    voice.lang
-                        .toLowerCase()
-                        .startsWith(
-                            languagePrefix
-                        )
-                ) {
-
-                    label +=
-                        " ✓";
-
-                }
-
-
-                option.textContent =
-                    label;
-
-
-                // ------------------------------------------------
-                // RESTORE PREVIOUS VOICE
-                // ------------------------------------------------
-
-                if (
-                    previousVoice &&
-                    voice.name ===
-                    previousVoice
-                ) {
-
-                    option.selected =
-                        true;
-
-                }
-
-
-                voiceSelect.appendChild(
-                    option
-                );
-
-            }
-        );
-
-
-        // ----------------------------------------------------
-        // STATUS
-        // ----------------------------------------------------
-
-        if (voices.length === 0) {
-
-            voiceStatus.textContent =
-                "No browser voices were detected.";
-
+        if (!text || !text.trim()) {{
             return;
+        }}
 
-        }
 
-
-        const matchingVoices =
-            voices.filter(
-                function(voice) {
-
-                    return voice.lang
-                        .toLowerCase()
-                        .startsWith(
-                            languagePrefix
-                        );
-
-                }
+        if (!("speechSynthesis" in window)) {{
+            console.warn(
+                "Speech synthesis is not supported by this browser."
             );
+            return;
+        }}
 
-
-        if (
-            matchingVoices.length > 0
-        ) {
-
-            voiceStatus.textContent =
-                voices.length +
-                " voice(s) available. " +
-                matchingVoices.length +
-                " match the active language.";
-
-        }
-        else {
-
-            voiceStatus.textContent =
-                voices.length +
-                " voice(s) available. " +
-                "No exact language match was found.";
-
-        }
-
-    }
-
-
-    // ========================================================
-    // INITIAL LOAD
-    // ========================================================
-
-    loadVoices();
-
-
-    // ========================================================
-    // VOICES CHANGED
-    // ========================================================
-
-    if (
-        "onvoiceschanged"
-        in window.speechSynthesis
-    ) {
-
-        window.speechSynthesis
-            .onvoiceschanged =
-            loadVoices;
-
-    }
-
-
-    // ========================================================
-    // SPEAK
-    // ========================================================
-
-    function speakText() {
-
-        // ----------------------------------------------------
-        // STOP CURRENT SPEECH
-        // ----------------------------------------------------
 
         window.speechSynthesis.cancel();
 
 
-        // ----------------------------------------------------
-        // CREATE UTTERANCE
-        // ----------------------------------------------------
-
         const utterance =
-            new SpeechSynthesisUtterance(
-                tutorText
-            );
+            new SpeechSynthesisUtterance(text);
 
 
-        // ----------------------------------------------------
-        // LANGUAGE
-        // ----------------------------------------------------
+        utterance.lang = language;
 
-        utterance.lang =
-            tutorLanguage;
+        utterance.rate = speechRate;
 
+        utterance.volume = speechVolume;
 
-        // ----------------------------------------------------
-        // RATE
-        // ----------------------------------------------------
+        utterance.pitch = speechPitch;
 
-        utterance.rate =
-            tutorRate;
-
-
-        // ----------------------------------------------------
-        // VOLUME
-        // ----------------------------------------------------
-
-        utterance.volume =
-            tutorVolume;
-
-
-        // ----------------------------------------------------
-        // PITCH
-        // ----------------------------------------------------
-
-        utterance.pitch =
-            tutorPitch;
-
-
-        // ----------------------------------------------------
-        // FIND SELECTED VOICE
-        // ----------------------------------------------------
 
         const voices =
-            window.speechSynthesis
-                .getVoices();
+            window.speechSynthesis.getVoices();
 
 
-        const selectedVoice =
-            voices.find(
-                function(voice) {
+        let selectedVoice = null;
 
-                    return (
-                        voice.name ===
-                        voiceSelect.value
-                    );
 
-                }
+        // ----------------------------------------------------
+        // FIRST: EXACT VOICE NAME
+        // ----------------------------------------------------
+
+        if (selectedVoiceName) {{
+
+            selectedVoice = voices.find(
+                function(voice) {{
+                    return voice.name === selectedVoiceName;
+                }}
             );
 
+        }}
+
 
         // ----------------------------------------------------
-        // APPLY SELECTED VOICE
+        // SECOND: LANGUAGE MATCH
         // ----------------------------------------------------
 
-        if (selectedVoice) {
+        if (!selectedVoice) {{
 
-            utterance.voice =
-                selectedVoice;
+            selectedVoice = voices.find(
+                function(voice) {{
 
-            utterance.lang =
-                selectedVoice.lang;
+                    return voice.lang &&
+                        voice.lang.toLowerCase() ===
+                        language.toLowerCase();
 
-        }
+                }}
+            );
+
+        }}
+
+
+        // ----------------------------------------------------
+        // THIRD: LANGUAGE PREFIX MATCH
+        // ----------------------------------------------------
+
+        if (!selectedVoice) {{
+
+            const languagePrefix =
+                language
+                    .toLowerCase()
+                    .split("-")[0];
+
+
+            selectedVoice = voices.find(
+                function(voice) {{
+
+                    return voice.lang &&
+                        voice.lang
+                            .toLowerCase()
+                            .startsWith(
+                                languagePrefix
+                            );
+
+                }}
+            );
+
+        }}
+
+
+        // ----------------------------------------------------
+        // APPLY VOICE
+        // ----------------------------------------------------
+
+        if (selectedVoice) {{
+            utterance.voice = selectedVoice;
+        }}
 
 
         // ----------------------------------------------------
         // SPEECH EVENTS
         // ----------------------------------------------------
 
-        utterance.onstart =
-            function() {
+        utterance.onstart = function() {{
 
-                voiceStatus.textContent =
-                    "🔊 Speaking...";
+            console.log(
+                "EduAccess-AI TTS started."
+            );
 
-            };
-
-
-        utterance.onend =
-            function() {
-
-                voiceStatus.textContent =
-                    "✅ Speech finished.";
-
-            };
+        }};
 
 
-        utterance.onerror =
-            function() {
+        utterance.onend = function() {{
 
-                voiceStatus.textContent =
-                    "⚠️ Unable to play this voice.";
+            console.log(
+                "EduAccess-AI TTS finished."
+            );
 
-            };
+        }};
 
 
-        // ----------------------------------------------------
-        // SPEAK
-        // ----------------------------------------------------
+        utterance.onerror = function(event) {{
+
+            console.warn(
+                "EduAccess-AI TTS error:",
+                event
+            );
+
+        }};
+
 
         window.speechSynthesis.speak(
             utterance
         );
 
-    }
+    }}
 
 
-    // ========================================================
-    // STOP SPEECH
-    // ========================================================
+    // --------------------------------------------------------
+    // BROWSER VOICES MAY LOAD ASYNCHRONOUSLY
+    // --------------------------------------------------------
 
-    function stopSpeech() {
+    if (
+        window.speechSynthesis
+    ) {{
 
-        window.speechSynthesis.cancel();
-
-
-        voiceStatus.textContent =
-            "⏹️ Speech stopped.";
-
-    }
+        const voices =
+            window.speechSynthesis.getVoices();
 
 
-    // ========================================================
-    // AUTOPLAY
-    // ========================================================
+        if (
+            voices &&
+            voices.length > 0
+        ) {{
 
-    {autoplay_code}
+            if (autoplay) {{
+                speakText();
+            }}
 
-    </script>
+        }} else {{
 
+            window.speechSynthesis.onvoiceschanged =
+                function() {{
+
+                    if (autoplay) {{
+                        speakText();
+                    }}
+
+                }};
+
+        }}
+
+    }}
+
+}})();
+
+</script>
+"""
+
+
+# ============================================================
+# SHOW TEXT TO SPEECH
+# ============================================================
+
+def show_text_to_speech(
+    text: str,
+    autoplay: bool = False,
+    language: str = "en-US",
+    selected_voice: str = "",
+    speech_rate: float = 0.9,
+    volume: float = 1.0,
+    pitch: float = 1.0,
+):
+    """
+    Display browser-based Text-to-Speech.
+
+    Parameters
+    ----------
+    text:
+        Text that should be spoken.
+
+    autoplay:
+        Automatically start speaking when True.
+
+    language:
+        Browser language code such as en-US, hi-IN, pa-IN.
+
+    selected_voice:
+        Saved browser voice name.
+
+    speech_rate:
+        Speech speed.
+
+    volume:
+        Speech volume.
+
+    pitch:
+        Speech pitch.
     """
 
-    component_html = (
-        component_html
-        .replace("{escaped_text}", escaped_text)
-        .replace("{escaped_language}", escaped_language)
-        .replace("{escaped_voice}", escaped_voice)
-        .replace("{speech_rate}", str(speech_rate))
-        .replace("{volume}", str(volume))
-        .replace("{pitch}", str(pitch))
-        .replace("{autoplay_code}", autoplay_code)
+    if not text:
+        return
+
+
+    javascript = _build_tts_javascript(
+        text=text,
+        language=language,
+        selected_voice=selected_voice,
+        speech_rate=speech_rate,
+        volume=volume,
+        pitch=pitch,
+        autoplay=autoplay,
     )
 
 
-    # ========================================================
-    # DISPLAY COMPONENT
-    # ========================================================
-
-    st.components.v1.html(
-
-        component_html,
-
-        height=250,
-
+    components.html(
+        javascript,
+        height=0,
+        scrolling=False,
     )
+
+
+# ============================================================
+# TEST TEXT TO SPEECH
+# ============================================================
+
+def test_text_to_speech(
+    language: str = "en-US",
+    selected_voice: str = "",
+    speech_rate: float = 0.9,
+    volume: float = 1.0,
+    pitch: float = 1.0,
+):
+    """
+    Test the current TTS settings.
+    """
+
+    test_messages = {
+
+        "en-US":
+            "Hello. This is the EduAccess AI text to speech test.",
+
+        "hi-IN":
+            "नमस्ते। यह EduAccess AI टेक्स्ट टू स्पीच टेस्ट है।",
+
+        "pa-IN":
+            "ਸਤ ਸ੍ਰੀ ਅਕਾਲ। ਇਹ EduAccess AI ਟੈਕਸਟ ਟੂ ਸਪੀਚ ਟੈਸਟ ਹੈ।",
+
+    }
+
+
+    text = test_messages.get(
+        language,
+        test_messages["en-US"],
+    )
+
+
+    show_text_to_speech(
+        text=text,
+        autoplay=True,
+        language=language,
+        selected_voice=selected_voice,
+        speech_rate=speech_rate,
+        volume=volume,
+        pitch=pitch,
+    )
+
+
+# ============================================================
+# STOP SPEECH
+# ============================================================
+
+def stop_text_to_speech():
+    """
+    Stop currently running browser speech.
+    """
+
+    components.html(
+        """
+<script>
+
+if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+}
+
+</script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+
+# ============================================================
+# SIMPLE TTS STATUS
+# ============================================================
+
+def is_tts_supported():
+    """
+    Return True because the implementation uses the browser's
+    SpeechSynthesis API.
+
+    Actual browser support is checked by JavaScript.
+    """
+
+    return True
+```python
+# ============================================================
+# TEST VOICE
+# ============================================================
+
+def test_voice(
+    language: str = "en-US",
+    selected_voice: str = "",
+    speech_rate: float = 0.9,
+    volume: float = 1.0,
+    pitch: float = 1.0,
+):
+    """
+    Compatibility wrapper for tutor.py.
+
+    Tests the currently selected browser TTS voice
+    using the current TTS settings.
+    """
+
+    test_text_to_speech(
+        language=language,
+        selected_voice=selected_voice,
+        speech_rate=speech_rate,
+        volume=volume,
+        pitch=pitch,
+    )
+```
+
+Then update the `__all__` section to:
+
+```python
+# ============================================================
+# EXPORTS
+# ============================================================
+
+__all__ = [
+    "show_text_to_speech",
+    "get_tts_language",
+    "test_text_to_speech",
+    "test_voice",
+    "get_available_tts_voices",
+    "get_available_voices",
+    "stop_text_to_speech",
+    "is_tts_supported",
+]
+```
+
+
+
+# ============================================================
+# EXPORTS
+# ============================================================
+
+__all__ = [
+    "show_text_to_speech",
+    "get_tts_language",
+    "test_text_to_speech",
+    "get_available_tts_voices",
+    "get_available_voices",
+    "stop_text_to_speech",
+    "is_tts_supported",
+]
