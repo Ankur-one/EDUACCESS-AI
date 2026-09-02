@@ -1,88 +1,157 @@
 # ============================================================
 # app/audio/tts.py
-# EDUACCESS-AI — TEXT TO SPEECH
+# EduAccess AI
+# Browser Text-to-Speech
 # ============================================================
-# NOTE: This file must not contain Markdown code fences such as
-# ```python ... ``` . If copied from documentation, strip them
-# before saving or the Python parser will fail on the opening tick.
 
+import importlib
 import json
 
+
+# ============================================================
+# STREAMLIT
+# ============================================================
+
 try:
-    import streamlit as st  # type: ignore
-    import streamlit.components.v1 as components  # type: ignore
-except ImportError:  # pragma: no cover
-    class _MissingStreamlitModule:
-        def __getattr__(self, _name):
-            raise RuntimeError("streamlit is required to run EduAccess-AI TTS.")
-
-    class _MissingComponentsModule:
-        @staticmethod
-        def html(*args, **kwargs):
-            raise RuntimeError("streamlit is required to run EduAccess-AI TTS.")
-
-    st = _MissingStreamlitModule()
-    components = _MissingComponentsModule()
+    st = importlib.import_module("streamlit")
+except ModuleNotFoundError:
+    st = None
 
 
 # ============================================================
-# LANGUAGE MAPPING
+# LANGUAGE MAP
 # ============================================================
 
-TTS_LANGUAGES = {
+TTS_LANGUAGE_MAP = {
     "English": "en-US",
     "Hindi": "hi-IN",
     "Punjabi": "pa-IN",
+    "Bengali": "bn-IN",
+    "Tamil": "ta-IN",
+    "Telugu": "te-IN",
+    "Marathi": "mr-IN",
+    "Gujarati": "gu-IN",
+    "Kannada": "kn-IN",
+    "Malayalam": "ml-IN",
+    "Urdu": "ur-IN",
 }
 
 
-def _strip_markdown_fences(code: str) -> str:
-    """
-    Remove accidental Markdown code fences from copied/pasted snippets.
-    This prevents Python syntax errors caused by stray backticks at the
-    start of a file or script block.
-    """
-    if not isinstance(code, str):
-        return code
+# ============================================================
+# DEFAULT VALUES
+# ============================================================
 
-    cleaned = code.strip()
+DEFAULT_LANGUAGE = "en-US"
+DEFAULT_RATE = 0.9
+DEFAULT_VOLUME = 1.0
+DEFAULT_PITCH = 1.0
 
-    if not cleaned.startswith("```"):
-        return cleaned
 
-    lines = cleaned.splitlines()
+def _require_streamlit():
+    """Ensure Streamlit is available before rendering HTML."""
 
-    if lines and lines[0].startswith("```"):
-        lines = lines[1:]
+    if st is None:
+        raise RuntimeError(
+            "streamlit is required to display browser TTS output."
+        )
 
-    if lines and lines[-1].rstrip().endswith("```"):
-        lines[-1] = lines[-1].rstrip()
-        if lines[-1].endswith("```"):
-            lines[-1] = lines[-1][:-3].rstrip()
+    return st
 
-    cleaned = "\n".join(lines).strip()
 
-    if cleaned.startswith("python"):
-        cleaned = cleaned[6:].lstrip()
+# ============================================================
+# KNOWN BROWSER VOICE NAMES
+#
+# IMPORTANT:
+# These are only suggestions/options.
+#
+# The browser decides whether a particular voice exists.
+# ============================================================
 
-    return cleaned
+KNOWN_VOICE_NAMES = [
+    "Microsoft David",
+    "Microsoft Zira",
+    "Microsoft Mark",
+    "Microsoft Heera",
+    "Microsoft Ravi",
+    "Microsoft Swara",
+    "Microsoft Kalpana",
+    "Google US English",
+    "Google UK English Female",
+    "Google UK English Male",
+    "Google हिन्दी",
+    "Google हिंदी",
+    "Google Deutsch",
+    "Google français",
+    "Google español",
+    "Samantha",
+    "Alex",
+    "Daniel",
+    "Karen",
+    "Moira",
+    "Veena",
+]
 
 
 # ============================================================
 # GET TTS LANGUAGE
 # ============================================================
 
-def get_tts_language(language_name: str) -> str:
+def get_tts_language(
+    language_name: str,
+) -> str:
     """
-    Convert application language name to browser TTS language code.
+    Convert application language to browser
+    SpeechSynthesis language code.
     """
 
     if not language_name:
-        return "en-US"
 
-    return TTS_LANGUAGES.get(
-        str(language_name),
-        "en-US",
+        return DEFAULT_LANGUAGE
+
+
+    language_name = str(
+        language_name
+    ).strip()
+
+
+    return TTS_LANGUAGE_MAP.get(
+        language_name,
+        DEFAULT_LANGUAGE,
+    )
+
+
+# ============================================================
+# SAFE FLOAT
+# ============================================================
+
+def _safe_float(
+    value,
+    default,
+    minimum,
+    maximum,
+):
+    """
+    Safely convert a value into a float.
+    """
+
+    try:
+
+        value = float(value)
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        value = default
+
+
+    return max(
+        minimum,
+        min(
+            maximum,
+            value,
+        ),
     )
 
 
@@ -92,112 +161,338 @@ def get_tts_language(language_name: str) -> str:
 
 def get_available_tts_voices():
     """
-    Return an empty list on the Python side.
+    Return known browser voice names.
 
-    Browser speech voices are actually discovered by JavaScript
-    inside the user's browser.
-
-    This function is kept for compatibility with tutor.py.
+    Actual browser voice availability is determined
+    by JavaScript in the user's browser.
     """
 
-    return []
+    return [
+        {
+            "name": voice_name,
+        }
+        for voice_name in KNOWN_VOICE_NAMES
+    ]
 
 
 # ============================================================
-# BACKWARD-COMPATIBILITY ALIAS
+# BACKWARD COMPATIBILITY
 # ============================================================
 
 def get_available_voices():
     """
-    Compatibility alias used by older tutor.py versions.
+    Backward-compatible alias.
     """
 
     return get_available_tts_voices()
 
 
 # ============================================================
-# BUILD TTS JAVASCRIPT
+# BUILD TTS HTML
 # ============================================================
 
-def _build_tts_javascript(
+def _build_tts_html(
     text: str,
-    language: str = "en-US",
-    selected_voice: str = "",
-    speech_rate: float = 0.9,
-    volume: float = 1.0,
-    pitch: float = 1.0,
-    autoplay: bool = True,
-) -> str:
+    autoplay: bool,
+    language: str,
+    selected_voice: str,
+    speech_rate: float,
+    volume: float,
+    pitch: float,
+):
     """
-    Build browser JavaScript for SpeechSynthesis.
+    Generate browser-side SpeechSynthesis JavaScript.
     """
 
-    safe_text = json.dumps(
-        str(text)
+    text_json = json.dumps(
+        text,
+        ensure_ascii=False,
     )
 
-    safe_language = json.dumps(
-        str(language or "en-US")
+    language_json = json.dumps(
+        language,
+        ensure_ascii=False,
     )
 
-    safe_voice = json.dumps(
-        str(selected_voice or "")
+    voice_json = json.dumps(
+        selected_voice,
+        ensure_ascii=False,
     )
 
-    try:
-        rate = float(speech_rate)
-    except (TypeError, ValueError):
-        rate = 0.9
-
-    try:
-        vol = float(volume)
-    except (TypeError, ValueError):
-        vol = 1.0
-
-    try:
-        pt = float(pitch)
-    except (TypeError, ValueError):
-        pt = 1.0
-
-    # Keep browser values within safe ranges.
-    rate = max(0.1, min(10.0, rate))
-    vol = max(0.0, min(1.0, vol))
-    pt = max(0.0, min(2.0, pt))
-
-    autoplay_value = (
-        "true"
-        if autoplay
-        else "false"
+    autoplay_json = json.dumps(
+        bool(autoplay)
     )
 
-    return f"""
+    rate_json = json.dumps(
+        speech_rate
+    )
+
+    volume_json = json.dumps(
+        volume
+    )
+
+    pitch_json = json.dumps(
+        pitch
+    )
+
+
+    html = f"""
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<style>
+
+body {{
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+}}
+
+.tts-container {{
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}}
+
+.tts-button {{
+    border: 1px solid #888;
+    border-radius: 6px;
+    padding: 8px 14px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+}}
+
+.tts-button:hover {{
+    background: #eeeeee;
+}}
+
+</style>
+
+</head>
+
+
+<body>
+
+<div class="tts-container">
+
+<button
+    class="tts-button"
+    onclick="speakText()"
+>
+🔊 Speak
+</button>
+
+<button
+    class="tts-button"
+    onclick="stopSpeech()"
+>
+⏹ Stop
+</button>
+
+</div>
+
+
 <script>
 
 (function() {{
 
-    const text = {safe_text};
-    const language = {safe_language};
-    const selectedVoiceName = {safe_voice};
+    const text = {text_json};
 
-    const speechRate = {rate};
-    const speechVolume = {vol};
-    const speechPitch = {pt};
+    const language = {language_json};
 
-    const autoplay = {autoplay_value};
+    const selectedVoiceName = {voice_json};
+
+    const autoplay = {autoplay_json};
+
+    const speechRate = {rate_json};
+
+    const speechVolume = {volume_json};
+
+    const speechPitch = {pitch_json};
 
 
-    function speakText() {{
+    // ========================================================
+    // STOP
+    // ========================================================
 
-        if (!text || !text.trim()) {{
-            return;
+    window.stopSpeech = function() {{
+
+        if (
+            "speechSynthesis" in window
+        ) {{
+
+            window.speechSynthesis.cancel();
+
+        }}
+
+    }};
+
+
+    // ========================================================
+    // GET BROWSER VOICES
+    // ========================================================
+
+    function getBrowserVoices() {{
+
+        if (
+            !("speechSynthesis" in window)
+        ) {{
+
+            return [];
+
         }}
 
 
-        if (!("speechSynthesis" in window)) {{
-            console.warn(
-                "Speech synthesis is not supported by this browser."
+        return window.speechSynthesis
+            .getVoices();
+
+    }}
+
+
+    // ========================================================
+    // FIND VOICE
+    // ========================================================
+
+    function findVoice() {{
+
+        const voices =
+            getBrowserVoices();
+
+
+        if (
+            !voices ||
+            voices.length === 0
+        ) {{
+
+            return null;
+
+        }}
+
+
+        // ----------------------------------------------------
+        // EXACT NAME MATCH
+        // ----------------------------------------------------
+
+        if (selectedVoiceName) {{
+
+            const exact =
+                voices.find(
+                    function(voice) {{
+
+                        return (
+                            voice.name ===
+                            selectedVoiceName
+                        );
+
+                    }}
+                );
+
+
+            if (exact) {{
+
+                return exact;
+
+            }}
+
+
+            // ------------------------------------------------
+            // PARTIAL NAME MATCH
+            // ------------------------------------------------
+
+            const partial =
+                voices.find(
+                    function(voice) {{
+
+                        return voice.name
+                            .toLowerCase()
+                            .includes(
+                                selectedVoiceName
+                                    .toLowerCase()
+                            );
+
+                    }}
+                );
+
+
+            if (partial) {{
+
+                return partial;
+
+            }}
+
+        }}
+
+
+        // ----------------------------------------------------
+        // LANGUAGE MATCH
+        // ----------------------------------------------------
+
+        const languagePrefix =
+            language
+                .toLowerCase()
+                .split("-")[0];
+
+
+        const languageVoice =
+            voices.find(
+                function(voice) {{
+
+                    if (!voice.lang) {{
+
+                        return false;
+
+                    }}
+
+
+                    return voice.lang
+                        .toLowerCase()
+                        .startsWith(
+                            languagePrefix
+                        );
+
+                }}
             );
+
+
+        if (languageVoice) {{
+
+            return languageVoice;
+
+        }}
+
+
+        // ----------------------------------------------------
+        // DEFAULT
+        // ----------------------------------------------------
+
+        return voices[0];
+
+    }}
+
+
+    // ========================================================
+    // SPEAK
+    // ========================================================
+
+    window.speakText = function() {{
+
+        if (
+            !("speechSynthesis" in window)
+        ) {{
+
+            console.error(
+                "SpeechSynthesis is not supported."
+            );
+
             return;
+
         }}
 
 
@@ -205,7 +500,9 @@ def _build_tts_javascript(
 
 
         const utterance =
-            new SpeechSynthesisUtterance(text);
+            new SpeechSynthesisUtterance(
+                text
+            );
 
 
         utterance.lang = language;
@@ -217,163 +514,94 @@ def _build_tts_javascript(
         utterance.pitch = speechPitch;
 
 
-        const voices =
-            window.speechSynthesis.getVoices();
+        const selectedVoice =
+            findVoice();
 
-
-        let selectedVoice = null;
-
-
-        // ----------------------------------------------------
-        // FIRST: EXACT VOICE NAME
-        // ----------------------------------------------------
-
-        if (selectedVoiceName) {{
-
-            selectedVoice = voices.find(
-                function(voice) {{
-                    return voice.name === selectedVoiceName;
-                }}
-            );
-
-        }}
-
-
-        // ----------------------------------------------------
-        // SECOND: LANGUAGE MATCH
-        // ----------------------------------------------------
-
-        if (!selectedVoice) {{
-
-            selectedVoice = voices.find(
-                function(voice) {{
-
-                    return voice.lang &&
-                        voice.lang.toLowerCase() ===
-                        language.toLowerCase();
-
-                }}
-            );
-
-        }}
-
-
-        // ----------------------------------------------------
-        // THIRD: LANGUAGE PREFIX MATCH
-        // ----------------------------------------------------
-
-        if (!selectedVoice) {{
-
-            const languagePrefix =
-                language
-                    .toLowerCase()
-                    .split("-")[0];
-
-
-            selectedVoice = voices.find(
-                function(voice) {{
-
-                    return voice.lang &&
-                        voice.lang
-                            .toLowerCase()
-                            .startsWith(
-                                languagePrefix
-                            );
-
-                }}
-            );
-
-        }}
-
-
-        // ----------------------------------------------------
-        // APPLY VOICE
-        // ----------------------------------------------------
 
         if (selectedVoice) {{
-            utterance.voice = selectedVoice;
+
+            utterance.voice =
+                selectedVoice;
+
         }}
-
-
-        // ----------------------------------------------------
-        // SPEECH EVENTS
-        // ----------------------------------------------------
-
-        utterance.onstart = function() {{
-
-            console.log(
-                "EduAccess-AI TTS started."
-            );
-
-        }};
-
-
-        utterance.onend = function() {{
-
-            console.log(
-                "EduAccess-AI TTS finished."
-            );
-
-        }};
-
-
-        utterance.onerror = function(event) {{
-
-            console.warn(
-                "EduAccess-AI TTS error:",
-                event
-            );
-
-        }};
 
 
         window.speechSynthesis.speak(
             utterance
         );
 
+    }};
+
+
+    // ========================================================
+    // LOAD VOICES
+    // ========================================================
+
+    function loadVoices() {{
+
+        if (
+            !("speechSynthesis" in window)
+        ) {{
+
+            return;
+
+        }}
+
+
+        window.speechSynthesis
+            .getVoices();
+
     }}
 
 
-    // --------------------------------------------------------
-    // BROWSER VOICES MAY LOAD ASYNCHRONOUSLY
-    // --------------------------------------------------------
+    loadVoices();
+
+
+    // ========================================================
+    // VOICES CHANGED
+    // ========================================================
 
     if (
-        window.speechSynthesis
+        "speechSynthesis" in window
     ) {{
 
-        const voices =
-            window.speechSynthesis.getVoices();
+        window.speechSynthesis
+            .addEventListener(
+                "voiceschanged",
+                loadVoices
+            );
+
+    }}
 
 
-        if (
-            voices &&
-            voices.length > 0
-        ) {{
+    // ========================================================
+    // AUTOPLAY
+    // ========================================================
 
-            if (autoplay) {{
-                speakText();
-            }}
+    if (autoplay) {{
 
-        }} else {{
+        setTimeout(
+            function() {{
 
-            window.speechSynthesis.onvoiceschanged =
-                function() {{
+                window.speakText();
 
-                    if (autoplay) {{
-                        speakText();
-                    }}
-
-                }};
-
-        }}
+            }},
+            700
+        );
 
     }}
 
 }})();
 
 </script>
+
+</body>
+
+</html>
 """
+
+
+    return html
 
 
 # ============================================================
@@ -383,99 +611,167 @@ def _build_tts_javascript(
 def show_text_to_speech(
     text: str,
     autoplay: bool = False,
-    language: str = "en-US",
+    language: str = DEFAULT_LANGUAGE,
     selected_voice: str = "",
-    speech_rate: float = 0.9,
-    volume: float = 1.0,
-    pitch: float = 1.0,
+    speech_rate: float = DEFAULT_RATE,
+    volume: float = DEFAULT_VOLUME,
+    pitch: float = DEFAULT_PITCH,
 ):
     """
-    Display browser-based Text-to-Speech.
-
-    Parameters
-    ----------
-    text:
-        Text that should be spoken.
-
-    autoplay:
-        Automatically start speaking when True.
-
-    language:
-        Browser language code such as en-US, hi-IN, pa-IN.
-
-    selected_voice:
-        Saved browser voice name.
-
-    speech_rate:
-        Speech speed.
-
-    volume:
-        Speech volume.
-
-    pitch:
-        Speech pitch.
+    Display the browser TTS controls.
     """
 
-    if not text:
+    if text is None:
+
         return
 
 
-    javascript = _build_tts_javascript(
+    text = str(
+        text
+    ).strip()
+
+
+    if not text:
+
+        return
+
+
+    # ========================================================
+    # NORMALIZE SETTINGS
+    # ========================================================
+
+    language = (
+        str(language)
+        if language
+        else DEFAULT_LANGUAGE
+    )
+
+
+    selected_voice = (
+        str(selected_voice)
+        if selected_voice
+        else ""
+    )
+
+
+    speech_rate = _safe_float(
+        speech_rate,
+        DEFAULT_RATE,
+        0.5,
+        2.0,
+    )
+
+
+    volume = _safe_float(
+        volume,
+        DEFAULT_VOLUME,
+        0.0,
+        1.0,
+    )
+
+
+    pitch = _safe_float(
+        pitch,
+        DEFAULT_PITCH,
+        0.5,
+        2.0,
+    )
+
+
+    # ========================================================
+    # CREATE HTML
+    # ========================================================
+
+    html = _build_tts_html(
         text=text,
+        autoplay=autoplay,
         language=language,
         selected_voice=selected_voice,
         speech_rate=speech_rate,
         volume=volume,
         pitch=pitch,
-        autoplay=autoplay,
     )
 
 
-    components.html(
-        javascript,
-        height=0,
+    # ========================================================
+    # DISPLAY
+    # ========================================================
+
+    st.components.v1.html(
+        html,
+        height=60,
         scrolling=False,
     )
 
 
 # ============================================================
-# TEST TEXT TO SPEECH
+# TEST VOICE
 # ============================================================
 
-def test_text_to_speech(
-    language: str = "en-US",
+def test_voice(
+    language: str = DEFAULT_LANGUAGE,
     selected_voice: str = "",
-    speech_rate: float = 0.9,
-    volume: float = 1.0,
-    pitch: float = 1.0,
+    speech_rate: float = DEFAULT_RATE,
+    volume: float = DEFAULT_VOLUME,
+    pitch: float = DEFAULT_PITCH,
 ):
     """
-    Test the current TTS settings.
+    Test the currently selected voice.
     """
 
-    test_messages = {
+    # --------------------------------------------------------
+    # Language-specific test sentence
+    # --------------------------------------------------------
 
-        "en-US":
-            "Hello. This is the EduAccess AI text to speech test.",
+    if language == "hi-IN":
 
-        "hi-IN":
-            "नमस्ते। यह EduAccess AI टेक्स्ट टू स्पीच टेस्ट है।",
+        test_text = (
+            "नमस्ते। यह EduAccess AI की "
+            "टेक्स्ट टू स्पीच आवाज़ का परीक्षण है।"
+        )
 
-        "pa-IN":
-            "ਸਤ ਸ੍ਰੀ ਅਕਾਲ। ਇਹ EduAccess AI ਟੈਕਸਟ ਟੂ ਸਪੀਚ ਟੈਸਟ ਹੈ।",
+    elif language == "pa-IN":
 
-    }
+        test_text = (
+            "ਸਤ ਸ੍ਰੀ ਅਕਾਲ। ਇਹ EduAccess AI "
+            "ਦੀ ਟੈਕਸਟ ਟੂ ਸਪੀਚ ਆਵਾਜ਼ ਦਾ ਟੈਸਟ ਹੈ।"
+        )
 
+    else:
 
-    text = test_messages.get(
-        language,
-        test_messages["en-US"],
-    )
+        test_text = (
+            "Hello. This is a test of the "
+            "EduAccess AI text to speech system."
+        )
 
 
     show_text_to_speech(
-        text=text,
+        text=test_text,
         autoplay=True,
+        language=language,
+        selected_voice=selected_voice,
+        speech_rate=speech_rate,
+        volume=volume,
+        pitch=pitch,
+    )
+
+
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+
+def test_text_to_speech(
+    language: str = DEFAULT_LANGUAGE,
+    selected_voice: str = "",
+    speech_rate: float = DEFAULT_RATE,
+    volume: float = DEFAULT_VOLUME,
+    pitch: float = DEFAULT_PITCH,
+):
+    """
+    Backward-compatible test function.
+    """
+
+    return test_voice(
         language=language,
         selected_voice=selected_voice,
         speech_rate=speech_rate,
@@ -490,96 +786,82 @@ def test_text_to_speech(
 
 def stop_text_to_speech():
     """
-    Stop currently running browser speech.
+    Stop browser speech.
     """
 
-    components.html(
-        """
+    html = """
 <script>
 
 if ("speechSynthesis" in window) {
+
     window.speechSynthesis.cancel();
+
 }
 
 </script>
-        """,
+"""
+
+
+    st.components.v1.html(
+        html,
         height=0,
         scrolling=False,
     )
 
 
 # ============================================================
-# SIMPLE TTS STATUS
+# VALIDATE SETTINGS
 # ============================================================
 
-def is_tts_supported():
-    """
-    Return True because the implementation uses the browser's
-    SpeechSynthesis API.
-
-    Actual browser support is checked by JavaScript.
-    """
-
-    return True
-```python
-# ============================================================
-# TEST VOICE
-# ============================================================
-
-def test_voice(
-    language: str = "en-US",
+def validate_tts_settings(
+    language: str = DEFAULT_LANGUAGE,
     selected_voice: str = "",
-    speech_rate: float = 0.9,
-    volume: float = 1.0,
-    pitch: float = 1.0,
+    speech_rate: float = DEFAULT_RATE,
+    volume: float = DEFAULT_VOLUME,
+    pitch: float = DEFAULT_PITCH,
 ):
     """
-    Compatibility wrapper for tutor.py.
-
-    Tests the currently selected browser TTS voice
-    using the current TTS settings.
+    Return validated TTS settings.
     """
 
-    test_text_to_speech(
-        language=language,
-        selected_voice=selected_voice,
-        speech_rate=speech_rate,
-        volume=volume,
-        pitch=pitch,
-    )
-```
+    return {
 
-Then update the `__all__` section to:
+        "language": (
+            str(language)
+            if language
+            else DEFAULT_LANGUAGE
+        ),
 
-```python
+        "selected_voice": (
+            str(selected_voice)
+            if selected_voice
+            else ""
+        ),
+
+        "speech_rate": _safe_float(
+            speech_rate,
+            DEFAULT_RATE,
+            0.5,
+            2.0,
+        ),
+
+        "volume": _safe_float(
+            volume,
+            DEFAULT_VOLUME,
+            0.0,
+            1.0,
+        ),
+
+        "pitch": _safe_float(
+            pitch,
+            DEFAULT_PITCH,
+            0.5,
+            2.0,
+        ),
+
+    }
+
+
 # ============================================================
-# EXPORTS
+# END OF TTS MODULE
 # ============================================================
-
-__all__ = [
-    "show_text_to_speech",
-    "get_tts_language",
-    "test_text_to_speech",
-    "test_voice",
-    "get_available_tts_voices",
-    "get_available_voices",
-    "stop_text_to_speech",
-    "is_tts_supported",
-]
-```
-
-
-
-# ============================================================
-# EXPORTS
-# ============================================================
-
-__all__ = [
-    "show_text_to_speech",
-    "get_tts_language",
-    "test_text_to_speech",
-    "get_available_tts_voices",
-    "get_available_voices",
-    "stop_text_to_speech",
-    "is_tts_supported",
-]

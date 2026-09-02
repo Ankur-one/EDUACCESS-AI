@@ -27,7 +27,7 @@ from app.database.models import User
 
 from app.ui.login import show_login
 from app.ui.dashboard import show_dashboard
-from app.ui.tutor import show_tutor
+from app.ai.tutor import show_tutor
 from app.ui.history import show_history
 from app.ui.settings import show_settings
 from app.ui.accessibility import (

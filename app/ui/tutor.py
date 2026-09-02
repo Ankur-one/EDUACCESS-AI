@@ -1,337 +1,205 @@
 # ============================================================
 # app/ui/tutor.py
-# ============================================================
-# EDUACCESS-AI
-#
-# Tutor UI
-# TTS + Database Preference Management
-#
-# Features:
-#   - Tutor session state
-#   - TTS enabled/disabled
-#   - Saved browser voice
-#   - Autoplay
-#   - Speech rate
-#   - Volume
-#   - Pitch
-#   - Database loading
-#   - Database saving
-#   - TTS preference summary
-#   - Test Voice
-#   - Tutor answer speech
+# EduAccess AI
+# AI Tutor + TTS + STT + Database Preferences
 # ============================================================
 
 import importlib
 
-
-# ============================================================
-# DATABASE
-# ============================================================
-
-from app.database.database import SessionLocal
-
 from app.database.models import User
-
-
-# ============================================================
-# TTS
-# ============================================================
+from app.database.database import SessionLocal
 
 from app.audio.tts import (
     show_text_to_speech,
     get_tts_language,
-    get_available_voices,
     test_voice,
+    get_available_tts_voices,
 )
 
-
-# ============================================================
-# OPTIONAL STT
-# ============================================================
-
 try:
-
     from app.audio.stt import (
         show_speech_to_text,
     )
-
 except ImportError:
-
     show_speech_to_text = None
+
+# NOTE: Backtick expressions are invalid Python syntax; keep string literals explicit.
 
 
 # ============================================================
 # STREAMLIT
 # ============================================================
 
-st = importlib.import_module(
-    "streamlit"
-)
+st = importlib.import_module("streamlit")
 
 
 # ============================================================
-# DEFAULT TTS VALUES
-# ============================================================
-
-DEFAULT_TTS_ENABLED = False
-
-DEFAULT_TTS_AUTOPLAY = False
-
-DEFAULT_TTS_VOICE = ""
-
-DEFAULT_TTS_RATE = 0.9
-
-DEFAULT_TTS_VOLUME = 1.0
-
-DEFAULT_TTS_PITCH = 1.0
-
-
-# ============================================================
-# 80.8.30.3
-# INITIALIZE TUTOR STATE
+# 1. INITIALIZE TUTOR SESSION STATE
 # ============================================================
 
 def initialize_tutor_state():
     """
-    Initialize all Tutor-related Streamlit session-state
-    variables.
-
-    Database values are loaded separately through
-    initialize_tts_preferences().
+    Initialize all Tutor-related Streamlit session state.
     """
 
-    # ========================================================
-    # CONVERSATION
-    # ========================================================
+    # --------------------------------------------------------
+    # Conversation
+    # --------------------------------------------------------
 
     if "messages" not in st.session_state:
-
         st.session_state.messages = []
 
 
-    # ========================================================
-    # TUTOR SESSION
-    # ========================================================
+    # --------------------------------------------------------
+    # Tutor session
+    # --------------------------------------------------------
 
     if "tutor_session_id" not in st.session_state:
-
         st.session_state.tutor_session_id = None
 
 
-    # ========================================================
-    # LANGUAGE
-    # ========================================================
+    # --------------------------------------------------------
+    # Language
+    # --------------------------------------------------------
 
     if "preferred_language" not in st.session_state:
-
         st.session_state.preferred_language = "English"
 
 
-    # ========================================================
-    # LEARNING PREFERENCES
-    # ========================================================
+    # --------------------------------------------------------
+    # Learning preferences
+    # --------------------------------------------------------
 
     if "simple_explanation" not in st.session_state:
-
         st.session_state.simple_explanation = True
 
-
     if "step_by_step_learning" not in st.session_state:
-
         st.session_state.step_by_step_learning = True
 
-
     if "repetition_support" not in st.session_state:
-
         st.session_state.repetition_support = False
 
-
     if "visual_explanation" not in st.session_state:
-
         st.session_state.visual_explanation = True
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # STT
-    # ========================================================
+    # --------------------------------------------------------
 
     if "stt_enabled" not in st.session_state:
-
         st.session_state.stt_enabled = False
 
 
     # ========================================================
-    # TTS ENABLED
+    # TTS
     # ========================================================
 
     if "tts_enabled" not in st.session_state:
-
-        st.session_state.tts_enabled = (
-            DEFAULT_TTS_ENABLED
-        )
-
-
-    # ========================================================
-    # TTS AUTOPLAY
-    # ========================================================
+        st.session_state.tts_enabled = False
 
     if "tts_autoplay" not in st.session_state:
-
-        st.session_state.tts_autoplay = (
-            DEFAULT_TTS_AUTOPLAY
-        )
-
-
-    # ========================================================
-    # TTS VOICE
-    # ========================================================
+        st.session_state.tts_autoplay = False
 
     if "tts_voice" not in st.session_state:
-
-        st.session_state.tts_voice = (
-            DEFAULT_TTS_VOICE
-        )
-
-
-    # ========================================================
-    # TTS RATE
-    # ========================================================
+        st.session_state.tts_voice = ""
 
     if "tts_rate" not in st.session_state:
-
-        st.session_state.tts_rate = (
-            DEFAULT_TTS_RATE
-        )
-
-
-    # ========================================================
-    # TTS VOLUME
-    # ========================================================
+        st.session_state.tts_rate = 0.9
 
     if "tts_volume" not in st.session_state:
-
-        st.session_state.tts_volume = (
-            DEFAULT_TTS_VOLUME
-        )
-
-
-    # ========================================================
-    # TTS PITCH
-    # ========================================================
+        st.session_state.tts_volume = 1.0
 
     if "tts_pitch" not in st.session_state:
-
-        st.session_state.tts_pitch = (
-            DEFAULT_TTS_PITCH
-        )
+        st.session_state.tts_pitch = 1.0
 
 
-    # ========================================================
-    # DATABASE LOAD FLAG
-    # ========================================================
+    # --------------------------------------------------------
+    # Database load flag
+    # --------------------------------------------------------
 
     if "tts_preferences_loaded" not in st.session_state:
-
         st.session_state.tts_preferences_loaded = False
 
 
-    # ========================================================
-    # CURRENT USER ID
-    # ========================================================
-
-    if "tts_preferences_user_id" not in st.session_state:
-
-        st.session_state.tts_preferences_user_id = None
-
-
-    # ========================================================
-    # SAVE STATUS
-    # ========================================================
+    # --------------------------------------------------------
+    # Save status
+    # --------------------------------------------------------
 
     if "tts_save_status" not in st.session_state:
-
         st.session_state.tts_save_status = "idle"
 
 
-    # ========================================================
-    # SAVE ERROR
-    # ========================================================
+    # --------------------------------------------------------
+    # Save error
+    # --------------------------------------------------------
 
     if "tts_save_error" not in st.session_state:
-
         st.session_state.tts_save_error = ""
 
 
 # ============================================================
-# LOAD USER TTS PREFERENCES
+# 2. LOAD TTS PREFERENCES FROM DATABASE
 # ============================================================
 
 def load_user_tts_preferences(
     user: User,
 ):
     """
-    Load TTS preferences from a User database object
-    into Streamlit session state.
+    Load TTS preferences from User database object.
     """
 
     if user is None:
-
         return
 
 
-    # ========================================================
-    # TTS ENABLED
-    # ========================================================
+    # --------------------------------------------------------
+    # TTS enabled
+    # --------------------------------------------------------
 
     st.session_state.tts_enabled = bool(
         getattr(
             user,
             "text_to_speech",
-            DEFAULT_TTS_ENABLED,
+            False,
         )
     )
 
 
-    # ========================================================
-    # VOICE
-    # ========================================================
+    # --------------------------------------------------------
+    # Voice
+    # --------------------------------------------------------
 
     saved_voice = getattr(
         user,
         "tts_voice",
-        DEFAULT_TTS_VOICE,
+        "",
     )
 
-
     if saved_voice is None:
-
-        saved_voice = DEFAULT_TTS_VOICE
-
+        saved_voice = ""
 
     st.session_state.tts_voice = str(
         saved_voice
     )
 
 
-    # ========================================================
-    # AUTOPLAY
-    # ========================================================
-
-    autoplay = getattr(
-        user,
-        "tts_autoplay",
-        DEFAULT_TTS_AUTOPLAY,
-    )
-
+    # --------------------------------------------------------
+    # Autoplay
+    # --------------------------------------------------------
 
     st.session_state.tts_autoplay = bool(
-        autoplay
+        getattr(
+            user,
+            "tts_autoplay",
+            False,
+        )
     )
 
 
-    # ========================================================
-    # RATE
-    # ========================================================
+    # --------------------------------------------------------
+    # Rate
+    # --------------------------------------------------------
 
     try:
 
@@ -339,7 +207,7 @@ def load_user_tts_preferences(
             getattr(
                 user,
                 "tts_rate",
-                DEFAULT_TTS_RATE,
+                0.9,
             )
         )
 
@@ -348,14 +216,12 @@ def load_user_tts_preferences(
         ValueError,
     ):
 
-        st.session_state.tts_rate = (
-            DEFAULT_TTS_RATE
-        )
+        st.session_state.tts_rate = 0.9
 
 
-    # ========================================================
-    # VOLUME
-    # ========================================================
+    # --------------------------------------------------------
+    # Volume
+    # --------------------------------------------------------
 
     try:
 
@@ -363,7 +229,7 @@ def load_user_tts_preferences(
             getattr(
                 user,
                 "tts_volume",
-                DEFAULT_TTS_VOLUME,
+                1.0,
             )
         )
 
@@ -372,14 +238,12 @@ def load_user_tts_preferences(
         ValueError,
     ):
 
-        st.session_state.tts_volume = (
-            DEFAULT_TTS_VOLUME
-        )
+        st.session_state.tts_volume = 1.0
 
 
-    # ========================================================
-    # PITCH
-    # ========================================================
+    # --------------------------------------------------------
+    # Pitch
+    # --------------------------------------------------------
 
     try:
 
@@ -387,7 +251,7 @@ def load_user_tts_preferences(
             getattr(
                 user,
                 "tts_pitch",
-                DEFAULT_TTS_PITCH,
+                1.0,
             )
         )
 
@@ -396,80 +260,37 @@ def load_user_tts_preferences(
         ValueError,
     ):
 
-        st.session_state.tts_pitch = (
-            DEFAULT_TTS_PITCH
-        )
+        st.session_state.tts_pitch = 1.0
 
 
-    # ========================================================
-    # MARK AS LOADED
-    # ========================================================
+    # --------------------------------------------------------
+    # Mark loaded
+    # --------------------------------------------------------
 
     st.session_state.tts_preferences_loaded = True
 
-    st.session_state.tts_preferences_user_id = (
-        user.id
-    )
-
 
 # ============================================================
-# INITIALIZE TTS PREFERENCES
+# 3. INITIALIZE DATABASE TTS PREFERENCES
 # ============================================================
 
 def initialize_tts_preferences(
     user: User,
 ):
     """
-    Load database TTS preferences once for the current user.
-
-    If another user logs in during the same Streamlit session,
-    the preferences are loaded again for that user.
+    Load database TTS preferences once.
     """
 
     if user is None:
-
         return
 
 
-    # ========================================================
-    # CURRENT USER ID
-    # ========================================================
-
-    current_user_id = getattr(
-        user,
-        "id",
-        None,
-    )
-
-
-    # ========================================================
-    # PREVIOUS USER ID
-    # ========================================================
-
-    loaded_user_id = st.session_state.get(
-        "tts_preferences_user_id",
-        None,
-    )
-
-
-    # ========================================================
-    # ALREADY LOADED FOR THIS USER
-    # ========================================================
-
-    if (
-        st.session_state.get(
-            "tts_preferences_loaded",
-            False,
-        )
-        and loaded_user_id == current_user_id
+    if st.session_state.get(
+        "tts_preferences_loaded",
+        False,
     ):
-
         return
 
-
-    # ========================================================
-    # LOAD
-    # ========================================================
 
     load_user_tts_preferences(
         user
@@ -477,7 +298,7 @@ def initialize_tts_preferences(
 
 
 # ============================================================
-# SAVE USER TTS PREFERENCES
+# 4. SAVE TTS PREFERENCES
 # ============================================================
 
 def save_user_tts_preferences(
@@ -485,22 +306,12 @@ def save_user_tts_preferences(
     user: User,
 ):
     """
-    Save all TTS preferences from Streamlit session state
-    into the database.
+    Save current TTS settings into the database.
     """
 
-    # ========================================================
-    # RESET STATUS
-    # ========================================================
-
     st.session_state.tts_save_status = "idle"
-
     st.session_state.tts_save_error = ""
 
-
-    # ========================================================
-    # VALIDATE DATABASE
-    # ========================================================
 
     if db is None:
 
@@ -513,10 +324,6 @@ def save_user_tts_preferences(
         return False
 
 
-    # ========================================================
-    # VALIDATE USER
-    # ========================================================
-
     if user is None:
 
         st.session_state.tts_save_status = "error"
@@ -528,47 +335,35 @@ def save_user_tts_preferences(
         return False
 
 
-    # ========================================================
-    # SAVE
-    # ========================================================
-
     try:
 
-        # ====================================================
-        # ENABLED
-        # ====================================================
+        # ----------------------------------------------------
+        # TTS enabled
+        # ----------------------------------------------------
 
         user.text_to_speech = bool(
             st.session_state.get(
                 "tts_enabled",
-                DEFAULT_TTS_ENABLED,
+                False,
             )
         )
 
 
-        # ====================================================
-        # VOICE
-        # ====================================================
-
-        selected_voice = st.session_state.get(
-            "tts_voice",
-            DEFAULT_TTS_VOICE,
-        )
-
-
-        if selected_voice is None:
-
-            selected_voice = DEFAULT_TTS_VOICE
-
+        # ----------------------------------------------------
+        # Voice
+        # ----------------------------------------------------
 
         user.tts_voice = str(
-            selected_voice
+            st.session_state.get(
+                "tts_voice",
+                "",
+            ) or ""
         )
 
 
-        # ====================================================
-        # AUTOPLAY
-        # ====================================================
+        # ----------------------------------------------------
+        # Autoplay
+        # ----------------------------------------------------
 
         if hasattr(
             user,
@@ -578,14 +373,14 @@ def save_user_tts_preferences(
             user.tts_autoplay = bool(
                 st.session_state.get(
                     "tts_autoplay",
-                    DEFAULT_TTS_AUTOPLAY,
+                    False,
                 )
             )
 
 
-        # ====================================================
-        # RATE
-        # ====================================================
+        # ----------------------------------------------------
+        # Rate
+        # ----------------------------------------------------
 
         if hasattr(
             user,
@@ -595,14 +390,14 @@ def save_user_tts_preferences(
             user.tts_rate = str(
                 st.session_state.get(
                     "tts_rate",
-                    DEFAULT_TTS_RATE,
+                    0.9,
                 )
             )
 
 
-        # ====================================================
-        # VOLUME
-        # ====================================================
+        # ----------------------------------------------------
+        # Volume
+        # ----------------------------------------------------
 
         if hasattr(
             user,
@@ -612,14 +407,14 @@ def save_user_tts_preferences(
             user.tts_volume = str(
                 st.session_state.get(
                     "tts_volume",
-                    DEFAULT_TTS_VOLUME,
+                    1.0,
                 )
             )
 
 
-        # ====================================================
-        # PITCH
-        # ====================================================
+        # ----------------------------------------------------
+        # Pitch
+        # ----------------------------------------------------
 
         if hasattr(
             user,
@@ -629,55 +424,56 @@ def save_user_tts_preferences(
             user.tts_pitch = str(
                 st.session_state.get(
                     "tts_pitch",
-                    DEFAULT_TTS_PITCH,
+                    1.0,
                 )
             )
 
 
-        # ====================================================
-        # COMMIT
-        # ====================================================
+        # ----------------------------------------------------
+        # Commit
+        # ----------------------------------------------------
 
         db.commit()
 
 
-        # ====================================================
-        # REFRESH
-        # ====================================================
+        # ----------------------------------------------------
+        # Refresh
+        # ----------------------------------------------------
 
         db.refresh(
             user
         )
 
 
-        # ====================================================
-        # SYNCHRONIZE SESSION STATE
-        # ====================================================
+        # ----------------------------------------------------
+        # Synchronize session state
+        # ----------------------------------------------------
 
         st.session_state.tts_enabled = bool(
             user.text_to_speech
         )
 
-
-        st.session_state.tts_voice = (
+        st.session_state.tts_voice = str(
             user.tts_voice or ""
         )
 
-
-        if hasattr(
-            user,
-            "tts_autoplay",
-        ):
-
-            st.session_state.tts_autoplay = bool(
-                user.tts_autoplay
+        st.session_state.tts_autoplay = bool(
+            getattr(
+                user,
+                "tts_autoplay",
+                False,
             )
+        )
 
 
         try:
 
             st.session_state.tts_rate = float(
-                user.tts_rate
+                getattr(
+                    user,
+                    "tts_rate",
+                    0.9,
+                )
             )
 
         except (
@@ -685,15 +481,17 @@ def save_user_tts_preferences(
             ValueError,
         ):
 
-            st.session_state.tts_rate = (
-                DEFAULT_TTS_RATE
-            )
+            st.session_state.tts_rate = 0.9
 
 
         try:
 
             st.session_state.tts_volume = float(
-                user.tts_volume
+                getattr(
+                    user,
+                    "tts_volume",
+                    1.0,
+                )
             )
 
         except (
@@ -701,15 +499,17 @@ def save_user_tts_preferences(
             ValueError,
         ):
 
-            st.session_state.tts_volume = (
-                DEFAULT_TTS_VOLUME
-            )
+            st.session_state.tts_volume = 1.0
 
 
         try:
 
             st.session_state.tts_pitch = float(
-                user.tts_pitch
+                getattr(
+                    user,
+                    "tts_pitch",
+                    1.0,
+                )
             )
 
         except (
@@ -717,46 +517,22 @@ def save_user_tts_preferences(
             ValueError,
         ):
 
-            st.session_state.tts_pitch = (
-                DEFAULT_TTS_PITCH
-            )
+            st.session_state.tts_pitch = 1.0
 
 
-        # ====================================================
-        # MARK CURRENT USER AS LOADED
-        # ====================================================
-
-        st.session_state.tts_preferences_loaded = True
-
-        st.session_state.tts_preferences_user_id = (
-            user.id
-        )
-
-
-        # ====================================================
-        # SUCCESS
-        # ====================================================
+        # ----------------------------------------------------
+        # Success
+        # ----------------------------------------------------
 
         st.session_state.tts_save_status = "saved"
-
         st.session_state.tts_save_error = ""
-
 
         return True
 
 
     except Exception as error:
 
-        # ====================================================
-        # ROLLBACK
-        # ====================================================
-
         db.rollback()
-
-
-        # ====================================================
-        # ERROR
-        # ====================================================
 
         st.session_state.tts_save_status = "error"
 
@@ -764,12 +540,82 @@ def save_user_tts_preferences(
             error
         )
 
+        return False
+
+
+# ============================================================
+# 5. TEST CURRENT VOICE
+# ============================================================
+
+def test_current_tts_voice():
+    """
+    Test the currently selected TTS voice.
+    """
+
+    language_name = st.session_state.get(
+        "preferred_language",
+        "English",
+    )
+
+
+    try:
+
+        language_code = get_tts_language(
+            language_name
+        )
+
+    except Exception:
+
+        language_code = "en-US"
+
+
+    selected_voice = st.session_state.get(
+        "tts_voice",
+        "",
+    )
+
+
+    speech_rate = st.session_state.get(
+        "tts_rate",
+        0.9,
+    )
+
+
+    volume = st.session_state.get(
+        "tts_volume",
+        1.0,
+    )
+
+
+    pitch = st.session_state.get(
+        "tts_pitch",
+        1.0,
+    )
+
+
+    try:
+
+        test_voice(
+            language=language_code,
+            selected_voice=selected_voice,
+            speech_rate=speech_rate,
+            volume=volume,
+            pitch=pitch,
+        )
+
+        return True
+
+    except Exception as error:
+
+        st.error(
+            f"❌ Voice test failed: {error}"
+        )
 
         return False
 
 
 # ============================================================
-# TTS SAVE BUTTON
+# 6. SAVE BUTTON
 # ============================================================
 
 def show_tts_save_button(
@@ -777,7 +623,7 @@ def show_tts_save_button(
     user: User,
 ):
     """
-    Display the Save TTS Preferences button.
+    Display Save and Test Voice buttons.
     """
 
     st.markdown(
@@ -785,13 +631,13 @@ def show_tts_save_button(
     )
 
 
-    # ========================================================
-    # CURRENT VOICE
-    # ========================================================
+    # --------------------------------------------------------
+    # Current voice
+    # --------------------------------------------------------
 
     current_voice = st.session_state.get(
         "tts_voice",
-        DEFAULT_TTS_VOICE,
+        "",
     )
 
 
@@ -808,29 +654,9 @@ def show_tts_save_button(
         )
 
 
-    # ========================================================
-    # CURRENT STATUS
-    # ========================================================
-
-    if st.session_state.get(
-        "tts_enabled",
-        False,
-    ):
-
-        st.caption(
-            "🔊 Text-to-Speech: Enabled"
-        )
-
-    else:
-
-        st.caption(
-            "🔇 Text-to-Speech: Disabled"
-        )
-
-
-    # ========================================================
-    # SAVE BUTTON
-    # ========================================================
+    # --------------------------------------------------------
+    # Save button
+    # --------------------------------------------------------
 
     save_clicked = st.button(
         "💾 Save Voice Settings",
@@ -838,6 +664,21 @@ def show_tts_save_button(
         use_container_width=True,
     )
 
+
+    # --------------------------------------------------------
+    # Test button
+    # --------------------------------------------------------
+
+    test_clicked = st.button(
+        "🔊 Test Voice",
+        key="test_tts_voice_button",
+        use_container_width=True,
+    )
+
+
+    # --------------------------------------------------------
+    # Save
+    # --------------------------------------------------------
 
     if save_clicked:
 
@@ -860,11 +701,10 @@ def show_tts_save_button(
                 "",
             )
 
-
             if error_message:
 
                 st.error(
-                    "❌ Unable to save TTS preferences: "
+                    f"❌ Unable to save TTS preferences: "
                     f"{error_message}"
                 )
 
@@ -875,170 +715,34 @@ def show_tts_save_button(
                 )
 
 
-    # ========================================================
-    # PERSISTENT STATUS
-    # ========================================================
+    # --------------------------------------------------------
+    # Test voice
+    # --------------------------------------------------------
 
-    elif st.session_state.get(
-        "tts_save_status",
-        "idle",
-    ) == "saved":
+    if test_clicked:
+
+        test_current_tts_voice()
+
+
+    # --------------------------------------------------------
+    # Saved status
+    # --------------------------------------------------------
+
+    if (
+        not save_clicked
+        and st.session_state.get(
+            "tts_save_status",
+            "idle",
+        ) == "saved"
+    ):
 
         st.success(
             "✅ TTS preferences are saved."
         )
 
 
-    elif st.session_state.get(
-        "tts_save_status",
-        "idle",
-    ) == "error":
-
-        error_message = st.session_state.get(
-            "tts_save_error",
-            "",
-        )
-
-
-        if error_message:
-
-            st.error(
-                f"❌ {error_message}"
-            )
-
-
 # ============================================================
-# VOICE NAME EXTRACTION
-# ============================================================
-
-def _get_voice_names(
-    voices,
-):
-    """
-    Convert the voice objects returned by the TTS module
-    into unique voice names.
-    """
-
-    names = []
-
-
-    for voice in voices or []:
-
-        if isinstance(
-            voice,
-            dict,
-        ):
-
-            name = voice.get(
-                "name",
-                "",
-            )
-
-        else:
-
-            name = getattr(
-                voice,
-                "name",
-                voice,
-            )
-
-
-        if name:
-
-            names.append(
-                str(name)
-            )
-
-
-    return list(
-        dict.fromkeys(
-            names
-        )
-    )
-
-
-# ============================================================
-# TEST CURRENT VOICE
-# ============================================================
-
-def show_tts_test_voice(
-):
-    """
-    Display a Test Voice button using the current TTS
-    session-state settings.
-    """
-
-    st.markdown(
-        "#### 🔊 Test Voice"
-    )
-
-
-    if st.button(
-        "🔊 Test Selected Voice",
-        key="test_tts_voice_button",
-        use_container_width=True,
-    ):
-
-        language_name = st.session_state.get(
-            "preferred_language",
-            "English",
-        )
-
-
-        try:
-
-            language_code = get_tts_language(
-                language_name
-            )
-
-        except Exception:
-
-            language_code = "en-US"
-
-
-        selected_voice = st.session_state.get(
-            "tts_voice",
-            DEFAULT_TTS_VOICE,
-        )
-
-
-        speech_rate = st.session_state.get(
-            "tts_rate",
-            DEFAULT_TTS_RATE,
-        )
-
-
-        volume = st.session_state.get(
-            "tts_volume",
-            DEFAULT_TTS_VOLUME,
-        )
-
-
-        pitch = st.session_state.get(
-            "tts_pitch",
-            DEFAULT_TTS_PITCH,
-        )
-
-
-        try:
-
-            test_voice(
-                language=language_code,
-                selected_voice=selected_voice,
-                speech_rate=speech_rate,
-                volume=volume,
-                pitch=pitch,
-            )
-
-        except Exception as error:
-
-            st.error(
-                f"❌ Unable to test voice: {error}"
-            )
-
-
-# ============================================================
-# TTS SETTINGS PANEL
+# 7. TTS SETTINGS PANEL
 # ============================================================
 
 def show_tts_settings_panel(
@@ -1046,17 +750,8 @@ def show_tts_settings_panel(
     current_user: User,
 ):
     """
-    Display the complete TTS settings panel.
+    Display complete TTS settings.
     """
-
-    if current_user is None:
-
-        st.warning(
-            "Please log in to manage TTS preferences."
-        )
-
-        return
-
 
     with st.expander(
         "🔊 Text-to-Speech Settings",
@@ -1064,7 +759,7 @@ def show_tts_settings_panel(
     ):
 
         # ====================================================
-        # ENABLE TTS
+        # ENABLE
         # ====================================================
 
         st.checkbox(
@@ -1092,14 +787,14 @@ def show_tts_settings_panel(
         )
 
 
-        # ====================================================
-        # GET VOICES
-        # ====================================================
+        # ----------------------------------------------------
+        # Get available voices
+        # ----------------------------------------------------
 
         try:
 
             available_voices = (
-                get_available_voices()
+                get_available_tts_voices()
             )
 
         except Exception:
@@ -1107,63 +802,121 @@ def show_tts_settings_panel(
             available_voices = []
 
 
-        voice_names = _get_voice_names(
-            available_voices
-        )
+        # ----------------------------------------------------
+        # Voice names
+        # ----------------------------------------------------
+
+        voice_names = []
 
 
-        # ====================================================
-        # CURRENT VOICE
-        # ====================================================
+        for voice in available_voices:
 
-        current_voice = st.session_state.get(
-            "tts_voice",
-            DEFAULT_TTS_VOICE,
-        )
+            if isinstance(
+                voice,
+                dict,
+            ):
 
-
-        # ====================================================
-        # VOICE SELECTOR
-        # ====================================================
-
-        if voice_names:
-
-            options = [
-                "",
-                *voice_names,
-            ]
-
-
-            if current_voice in options:
-
-                current_index = options.index(
-                    current_voice
+                voice_name = voice.get(
+                    "name",
+                    "",
                 )
 
             else:
 
-                current_index = 0
+                voice_name = getattr(
+                    voice,
+                    "name",
+                    str(voice),
+                )
 
 
-            st.selectbox(
-                "Select voice",
-                options=options,
-                index=current_index,
-                format_func=lambda value: (
-                    "Automatic browser voice"
-                    if value == ""
-                    else value
-                ),
-                key="tts_voice",
+            if voice_name:
+
+                voice_names.append(
+                    str(voice_name)
+                )
+
+
+        # ----------------------------------------------------
+        # Remove duplicates
+        # ----------------------------------------------------
+
+        voice_names = list(
+            dict.fromkeys(
+                voice_names
+            )
+        )
+
+
+        # ----------------------------------------------------
+        # Current voice
+        # ----------------------------------------------------
+
+        current_voice = st.session_state.get(
+            "tts_voice",
+            "",
+        )
+
+
+        # ----------------------------------------------------
+        # Options
+        # ----------------------------------------------------
+
+        options = [
+            "",
+            *voice_names,
+        ]
+
+
+        # ----------------------------------------------------
+        # Add saved voice if not in known list
+        #
+        # This is important:
+        # A saved browser voice must never disappear
+        # from the selector.
+        # ----------------------------------------------------
+
+        if (
+            current_voice
+            and current_voice not in options
+        ):
+
+            options.insert(
+                1,
+                current_voice,
+            )
+
+
+        # ----------------------------------------------------
+        # Current index
+        # ----------------------------------------------------
+
+        if current_voice in options:
+
+            current_index = options.index(
+                current_voice
             )
 
         else:
 
-            st.info(
-                "Browser voices are detected when speech "
-                "is played. You can still use the browser's "
-                "default voice or enter a saved voice later."
-            )
+            current_index = 0
+
+
+        # ----------------------------------------------------
+        # Voice selector
+        # ----------------------------------------------------
+
+        st.selectbox(
+            "Select voice",
+            options=options,
+            index=current_index,
+            format_func=lambda value: (
+                "Automatic browser voice"
+                if value == ""
+                else value
+            ),
+            key="tts_voice",
+        )
 
 
         # ====================================================
@@ -1174,12 +927,6 @@ def show_tts_settings_panel(
             "Speech Rate",
             min_value=0.5,
             max_value=2.0,
-            value=float(
-                st.session_state.get(
-                    "tts_rate",
-                    DEFAULT_TTS_RATE,
-                )
-            ),
             step=0.1,
             key="tts_rate",
         )
@@ -1193,12 +940,6 @@ def show_tts_settings_panel(
             "Volume",
             min_value=0.0,
             max_value=1.0,
-            value=float(
-                st.session_state.get(
-                    "tts_volume",
-                    DEFAULT_TTS_VOLUME,
-                )
-            ),
             step=0.1,
             key="tts_volume",
         )
@@ -1212,12 +953,6 @@ def show_tts_settings_panel(
             "Pitch",
             min_value=0.5,
             max_value=2.0,
-            value=float(
-                st.session_state.get(
-                    "tts_pitch",
-                    DEFAULT_TTS_PITCH,
-                )
-            ),
             step=0.1,
             key="tts_pitch",
         )
@@ -1227,14 +962,11 @@ def show_tts_settings_panel(
         # CURRENT SETTINGS
         # ====================================================
 
-        st.markdown(
-            "---"
-        )
-
+        st.markdown("---")
 
         selected_voice = st.session_state.get(
             "tts_voice",
-            DEFAULT_TTS_VOICE,
+            "",
         )
 
 
@@ -1254,14 +986,7 @@ def show_tts_settings_panel(
 
 
         # ====================================================
-        # TEST VOICE
-        # ====================================================
-
-        show_tts_test_voice()
-
-
-        # ====================================================
-        # SAVE
+        # SAVE SECTION
         # ====================================================
 
         show_tts_save_button(
@@ -1271,29 +996,25 @@ def show_tts_settings_panel(
 
 
 # ============================================================
-# SPEAK TUTOR ANSWER
+# 8. SPEAK TUTOR ANSWER
 # ============================================================
 
 def speak_tutor_answer(
     answer: str,
 ):
     """
-    Speak a Tutor answer using the current saved TTS
-    preferences stored in Streamlit session state.
+    Speak the Tutor answer using the current
+    saved TTS settings.
     """
-
-    # ========================================================
-    # EMPTY ANSWER
-    # ========================================================
 
     if not answer:
 
         return
 
 
-    # ========================================================
-    # TTS ENABLED
-    # ========================================================
+    # --------------------------------------------------------
+    # TTS enabled?
+    # --------------------------------------------------------
 
     if not st.session_state.get(
         "tts_enabled",
@@ -1303,9 +1024,9 @@ def speak_tutor_answer(
         return
 
 
-    # ========================================================
-    # LANGUAGE
-    # ========================================================
+    # --------------------------------------------------------
+    # Language
+    # --------------------------------------------------------
 
     language_name = st.session_state.get(
         "preferred_language",
@@ -1324,131 +1045,129 @@ def speak_tutor_answer(
         language_code = "en-US"
 
 
-    # ========================================================
-    # SAVED VOICE
-    # ========================================================
+    # --------------------------------------------------------
+    # Saved voice
+    # --------------------------------------------------------
 
     selected_voice = st.session_state.get(
         "tts_voice",
-        DEFAULT_TTS_VOICE,
+        "",
     )
 
 
-    # ========================================================
-    # RATE
-    # ========================================================
+    # --------------------------------------------------------
+    # Settings
+    # --------------------------------------------------------
 
     speech_rate = st.session_state.get(
         "tts_rate",
-        DEFAULT_TTS_RATE,
+        0.9,
     )
-
-
-    # ========================================================
-    # VOLUME
-    # ========================================================
 
     volume = st.session_state.get(
         "tts_volume",
-        DEFAULT_TTS_VOLUME,
+        1.0,
     )
-
-
-    # ========================================================
-    # PITCH
-    # ========================================================
 
     pitch = st.session_state.get(
         "tts_pitch",
-        DEFAULT_TTS_PITCH,
+        1.0,
     )
-
-
-    # ========================================================
-    # AUTOPLAY
-    # ========================================================
 
     autoplay = st.session_state.get(
         "tts_autoplay",
-        DEFAULT_TTS_AUTOPLAY,
+        False,
     )
 
 
-    # ========================================================
-    # SPEAK
-    # ========================================================
+    # --------------------------------------------------------
+    # Speak
+    # --------------------------------------------------------
 
-    show_text_to_speech(
-        text=answer,
-        autoplay=autoplay,
-        language=language_code,
-        selected_voice=selected_voice,
-        speech_rate=speech_rate,
-        volume=volume,
-        pitch=pitch,
-    )
+    try:
+
+        show_text_to_speech(
+
+            text=answer,
+
+            autoplay=autoplay,
+
+            language=language_code,
+
+            selected_voice=selected_voice,
+
+            speech_rate=speech_rate,
+
+            volume=volume,
+
+            pitch=pitch,
+
+        )
+
+    except Exception as error:
+
+        st.warning(
+            f"TTS could not be started: {error}"
+        )
 
 
 # ============================================================
-# GET TTS SETTINGS
+# 9. GET TTS SETTINGS
 # ============================================================
 
 def get_tts_settings():
     """
-    Return the current TTS settings.
+    Return current TTS settings.
     """
 
     return {
 
-        "enabled": bool(
-            st.session_state.get(
-                "tts_enabled",
-                DEFAULT_TTS_ENABLED,
-            )
+        "enabled": st.session_state.get(
+            "tts_enabled",
+            False,
         ),
 
-        "autoplay": bool(
-            st.session_state.get(
-                "tts_autoplay",
-                DEFAULT_TTS_AUTOPLAY,
-            )
+        "autoplay": st.session_state.get(
+            "tts_autoplay",
+            False,
         ),
 
         "voice": st.session_state.get(
             "tts_voice",
-            DEFAULT_TTS_VOICE,
+            "",
         ),
 
         "rate": float(
             st.session_state.get(
                 "tts_rate",
-                DEFAULT_TTS_RATE,
+                0.9,
             )
         ),
 
         "volume": float(
             st.session_state.get(
                 "tts_volume",
-                DEFAULT_TTS_VOLUME,
+                1.0,
             )
         ),
 
         "pitch": float(
             st.session_state.get(
                 "tts_pitch",
-                DEFAULT_TTS_PITCH,
+                1.0,
             )
         ),
+
     }
 
 
 # ============================================================
-# TTS PREFERENCE SUMMARY
+# 10. TTS SUMMARY
 # ============================================================
 
 def show_tts_preference_summary():
     """
-    Display the current TTS preference summary.
+    Display current TTS settings.
     """
 
     settings = get_tts_settings()
@@ -1459,9 +1178,9 @@ def show_tts_preference_summary():
     )
 
 
-    # ========================================================
-    # STATUS
-    # ========================================================
+    # --------------------------------------------------------
+    # Enabled
+    # --------------------------------------------------------
 
     if settings["enabled"]:
 
@@ -1476,9 +1195,9 @@ def show_tts_preference_summary():
         )
 
 
-    # ========================================================
-    # VOICE
-    # ========================================================
+    # --------------------------------------------------------
+    # Voice
+    # --------------------------------------------------------
 
     if settings["voice"]:
 
@@ -1495,9 +1214,9 @@ def show_tts_preference_summary():
         )
 
 
-    # ========================================================
-    # AUTOPLAY
-    # ========================================================
+    # --------------------------------------------------------
+    # Autoplay
+    # --------------------------------------------------------
 
     if settings["autoplay"]:
 
@@ -1512,9 +1231,9 @@ def show_tts_preference_summary():
         )
 
 
-    # ========================================================
-    # RATE
-    # ========================================================
+    # --------------------------------------------------------
+    # Rate
+    # --------------------------------------------------------
 
     st.write(
         f"⚡ **Rate:** "
@@ -1522,9 +1241,9 @@ def show_tts_preference_summary():
     )
 
 
-    # ========================================================
-    # VOLUME
-    # ========================================================
+    # --------------------------------------------------------
+    # Volume
+    # --------------------------------------------------------
 
     st.write(
         f"🔊 **Volume:** "
@@ -1532,9 +1251,9 @@ def show_tts_preference_summary():
     )
 
 
-    # ========================================================
-    # PITCH
-    # ========================================================
+    # --------------------------------------------------------
+    # Pitch
+    # --------------------------------------------------------
 
     st.write(
         f"🎵 **Pitch:** "
@@ -1543,27 +1262,26 @@ def show_tts_preference_summary():
 
 
 # ============================================================
-# DATABASE SESSION
+# 11. DATABASE SESSION
 # ============================================================
 
 def get_tts_database_session():
     """
-    Create a SQLAlchemy database session.
+    Create SQLAlchemy database session.
     """
 
     return SessionLocal()
 
 
 # ============================================================
-# INITIALIZE TUTOR FOR LOGGED-IN USER
+# 12. INITIALIZE TUTOR FOR USER
 # ============================================================
 
 def initialize_tutor_for_user(
     current_user: User,
 ):
     """
-    Initialize Tutor state and load the logged-in user's
-    TTS preferences.
+    Initialize Tutor and load user preferences.
     """
 
     initialize_tutor_state()
@@ -1574,68 +1292,21 @@ def initialize_tutor_for_user(
 
 
 # ============================================================
-# TUTOR PAGE ENTRY
+# 13. TUTOR PAGE INITIALIZATION
 # ============================================================
 
 def initialize_tutor_page(
     current_user: User,
 ):
     """
-    Optional complete Tutor initialization helper.
-
-    Use this when the Tutor page needs to initialize TTS
-    settings and display the settings panel.
+    Convenience Tutor initialization function.
     """
-
-    if current_user is None:
-
-        st.warning(
-            "No logged-in user was provided."
-        )
-
-        return
-
-
-    # ========================================================
-    # INITIALIZE
-    # ========================================================
 
     initialize_tutor_for_user(
         current_user
     )
 
 
-    # ========================================================
-    # DATABASE
-    # ========================================================
-
-    db = get_tts_database_session()
-
-
-    try:
-
-        # ====================================================
-        # SETTINGS
-        # ====================================================
-
-        show_tts_settings_panel(
-            db=db,
-            current_user=current_user,
-        )
-
-
-        # ====================================================
-        # SUMMARY
-        # ====================================================
-
-        show_tts_preference_summary()
-
-
-    finally:
-
-        db.close()
-
-
 # ============================================================
-# END OF app/ui/tutor.py
+# END OF TUTOR MODULE
 # ============================================================
